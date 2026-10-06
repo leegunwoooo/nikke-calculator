@@ -33,3 +33,6 @@ nikke_mcp/claude-desktop-config.json
 
 # 루트 캐시 (vite 등)
 node_modules/
+
+.vercel
+.env*
