@@ -26,7 +26,7 @@
   {
     "slug": "overload-guide",
     "title": "니케 오버로드 옵작 가이드 · 모듈 기대값",
-    "route": "/calculator",
+    "route": "/utilities/overload-guide",
     "description": "니케 오버로드 옵션 줄 수와 최소 레벨을 정하고 커스텀 모듈·락 키 기대 소모량을 비교하세요. 우월코드·공격력 8줄작, 효과변경·수치작·잠금 비용과 진행 순서를 안내합니다.",
     "sections": [
       {

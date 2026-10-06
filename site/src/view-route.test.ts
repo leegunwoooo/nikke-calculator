@@ -15,4 +15,7 @@ describe('view URLs', () => {
     expect(parseViewHash('#/unknown')).toEqual({ view: 'calc' });
     expect(parseViewHash('')).toEqual({ view: 'calc' });
   });
+  it('routes the overload guide to the calculator with the guide flag', () => {
+    expect(parseViewHash('#/utilities/overload-guide')).toEqual({ view: 'calc', guide: true });
+  });
 });

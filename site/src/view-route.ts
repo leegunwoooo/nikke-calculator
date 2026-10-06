@@ -10,8 +10,10 @@ export type FunView = keyof typeof UTILITY_ROUTES;
 export function viewHash(view: ViewName, utility: FunView = 'skills'): string {
   return '#' + (view === 'fun' ? UTILITY_ROUTES[utility] : VIEW_ROUTES[view]);
 }
-export function parseViewHash(hash: string): { view: ViewName; utility?: FunView } {
+export function parseViewHash(hash: string): { view: ViewName; utility?: FunView; guide?: boolean } {
   const path = hash.slice(1).replace(/\/$/, '');
+  // 옵작 가이드는 캐릭터 설정 안의 대화상자라 독립 화면이 없다 — 계산기 위에 띄운다.
+  if (path === '/utilities/overload-guide') return { view: 'calc', guide: true };
   for (const [view, route] of Object.entries(VIEW_ROUTES)) {
     if (path === route) return { view: view as keyof typeof VIEW_ROUTES };
   }

@@ -8614,12 +8614,25 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
     shareModal.hidden = false;
   }
 
+  // 옵작 가이드는 캐릭터 설정 안의 대화상자라 화면 라우트가 따로 없다 — 해시로
+  // 들어오면 지금 덱의 첫 니케로 바로 띄우고, 덱이 비었으면 카탈로그 첫 니케로.
+  const openGuideRoute = () => {
+    const deck = activeDeck();
+    const name = deck.squad.find((member) => member) ?? catalog[0]?.name;
+    if (!name) return;
+    const current = deck.characters[name] ?? roster[name];
+    void import('./overload-guide').then(({ openOverloadGuide }) => {
+      openOverloadGuide(name, settings, current ? cloneOverride(current) : ({} as CharacterOverrides));
+    });
+  };
+
   const restoreViewUrl = () => {
     if (!root.isConnected) return;
     const route = parseViewHash(location.hash);
     if (route.utility) funView = route.utility;
     switchView(route.view === 'union' && !hasSyncSource ? 'calc' : route.view, false);
     writeViewUrl(true);
+    if (route.guide) openGuideRoute();
   };
   restoreViewUrl();
   window.addEventListener('popstate', restoreViewUrl);
