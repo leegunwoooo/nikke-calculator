@@ -3,7 +3,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 permissions:
@@ -45,8 +45,10 @@ jobs:
         # Settings → Secrets and variables → Actions → Variables. 비어 있으면 그 기능의 UI가
         # 빠진 채로 배포된다(`site/.env.production` 주석, `worker/README.md`).
         env:
+          VITE_NIKKE_API: ${{ vars.VITE_NIKKE_API }}
           VITE_BLABLA_PROXY: ${{ vars.VITE_BLABLA_PROXY }}
           VITE_SHARE_API: ${{ vars.VITE_SHARE_API }}
+          VITE_BASE: ${{ vars.VITE_BASE }}
         run: npm run build
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

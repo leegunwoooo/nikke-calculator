@@ -93,7 +93,7 @@ npm run check-runtime
 
 ## 배포
 
-`master` 브랜치에 푸시하면 GitHub Actions가 의존성을 잠금 파일대로 설치하고 테스트와 프로덕션 빌드를 통과한 `site/dist`만 GitHub Pages에 배포합니다. Vite의 배포 기본 경로는 `/nikke-calc/`입니다.
+`main` 브랜치에 푸시하면 GitHub Actions가 의존성을 잠금 파일대로 설치하고 테스트와 프로덕션 빌드를 통과한 `site/dist`만 GitHub Pages에 배포합니다. Vite의 배포 기본 경로는 `/nikke-calc/`입니다.
 
 ### 블라블라링크 연동 (선택)
 

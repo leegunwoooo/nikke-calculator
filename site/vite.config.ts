@@ -17,7 +17,9 @@ for (const file of readdirSync(engineDir).filter((f) => f.endsWith('.ts') && !f.
 const engineId = JSON.stringify(engineHash.digest('hex').slice(0, 12));
 
 export default defineConfig({
-  base: '/nikke-calc/',
+  // 배포 경로 — 저장소 이름이 바뀌면 GitHub Pages 주소도 바뀌므로 VITE_BASE로 덮는다
+  // (예: nikke-calculator 저장소 → /nikke-calculator/). 로컬 개발은 기본값 그대로.
+  base: process.env.VITE_BASE || '/nikke-calc/',
   define: {
     __BUILD_ID__: buildId,
     __ENGINE_ID__: engineId,
