@@ -1,0 +1,16 @@
+# Free browser relay only. No databases, disks or paid add-ons.
+services:
+  - type: web
+    name: nikke-calc-mcp
+    runtime: docker
+    plan: free
+    region: singapore
+    repo: https://github.com/Moris-kr/nikke-calc
+    branch: master
+    dockerfilePath: ./nikke_mcp/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PORT
+        value: "8000"

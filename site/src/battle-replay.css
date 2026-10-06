@@ -1,0 +1,236 @@
+/* 전투 결과 재생 — 16:9 무대. 안쪽 크기는 전부 무대 폭(cqw) 기준이라 통째로 커지고 줄어든다. */
+.custom-modal.replay-modal { z-index: 1200; }
+.replay-card { width: min(1280px, 97vw); max-height: 96vh; overflow: auto; }
+.replay-status { margin: 4px 0 10px; color: var(--muted, #9fb2c4); font-size: 12.5px; }
+.replay-note { margin: 10px 0 0; color: var(--muted, #9fb2c4); font-size: 11.5px; line-height: 1.6; }
+
+.br-stage { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px;
+  container-type: inline-size; background: #1a1f22; user-select: none; -webkit-user-select: none;
+  border: 1px solid rgba(146,176,201,.25); }
+.br-stage[hidden] { display: none; }
+.br-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.br-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s ease;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(255,150,40,.28) 100%); }
+.br-stage.is-full-burst::after { opacity: 1; }
+
+/* 적과 피격 범위 — 피격 범위의 자리·크기는 코드의 HIT(y 0.37, 반지름 0.085 × 무대 폭)와 같다 */
+/* 피격(--hit 0~1, 코드가 칸마다 정한다) — 살짝 밝아지고 붉게 번지며, translate로 조금 떨린다(흔들림 transform과 따로 논다). */
+.br-enemy { --hit: 0; position: absolute; left: 50%; top: 40%; width: calc(27% * var(--dist, 1)); transform: translate(-50%, -52%);
+  filter: drop-shadow(0 1.2cqw 1.2cqw rgba(0,0,0,.45)) brightness(calc(1 + var(--hit) * .18))
+    drop-shadow(0 0 calc(var(--hit) * .9cqw) rgba(255,90,60,calc(var(--hit) * .4)));
+  animation: br-bob 3.2s ease-in-out infinite; pointer-events: none; }
+@keyframes br-bob { 50% { transform: translate(-50%, -55%); } }
+.br-hitbox { position: absolute; left: 50%; top: 37%; width: calc(17cqw * var(--dist, 1)); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border: max(3px, .34cqw) dashed #ff4b4b; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,60,60,.06) 0 62%, rgba(255,60,60,.2) 100%);
+  box-shadow: 0 0 0 max(1.5px, .16cqw) rgba(20,0,0,.6), inset 0 0 0 max(1.5px, .16cqw) rgba(20,0,0,.45);
+  transition: box-shadow .08s, border-color .08s; pointer-events: none; }
+.br-hitbox.is-hit { border-color: #ffb08a; box-shadow: 0 0 0 max(1.5px, .16cqw) rgba(20,0,0,.6), 0 0 1.8cqw rgba(255,110,80,.75), inset 0 0 2.6cqw rgba(255,110,80,.35); }
+.br-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* 위 — 누적 딜 · 진행 · 시계 */
+.br-top { position: absolute; top: 2%; left: 1.6%; right: 1.6%; display: flex; align-items: center; gap: 2cqw; pointer-events: none; }
+.br-total { display: flex; flex-direction: column; min-width: 16cqw; padding: .5cqw 1cqw; border-radius: .8cqw;
+  background: rgba(8,16,26,.62); color: #fff; line-height: 1.15; }
+.br-total b { font-size: max(12px, 1.9cqw); font-weight: 900; letter-spacing: -.01em; }
+.br-total span { font-size: max(9px, .9cqw); color: #b9c9d8; }
+.br-progress { position: relative; flex: 1; max-width: 38cqw; height: max(4px, .45cqw); margin: 0 auto; border-radius: 99px;
+  background: rgba(255,255,255,.22); pointer-events: auto; cursor: pointer; }
+.br-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: #4fc8ff;
+  box-shadow: 0 0 .8cqw rgba(79,200,255,.7); }
+.br-progress-marks i { position: absolute; top: -.25cqw; bottom: -.25cqw; background: rgba(255,191,60,.45); border-radius: 2px; }
+.br-clock { padding: .5cqw 1.1cqw; border-radius: 99px; background: rgba(8,16,26,.62); color: #fff;
+  font: 800 max(10px, 1.3cqw) ui-monospace, monospace; white-space: nowrap; }
+
+/* 오른쪽 가운데 — 버스트 게이지 */
+.br-gauge { position: absolute; right: 1.2%; top: 40%; width: 18cqw; display: grid; grid-template-columns: auto 1fr; align-items: center;
+  gap: .3cqw .7cqw; }
+.br-gauge-stage { grid-row: span 2; display: grid; place-items: center; width: 2.9cqw; height: 3.2cqw; min-width: 22px; min-height: 24px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: #2fd26a; color: #04210f;
+  font: 900 max(10px, 1.3cqw) ui-monospace, monospace; }
+.br-gauge-bar { height: max(5px, .6cqw); border-radius: 99px; background: rgba(0,0,0,.45); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.br-gauge-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #1fb95a, #6bff9e); }
+.br-gauge-text { color: #d9ffe6; font: 800 max(9px, 1cqw) ui-monospace, monospace; text-shadow: 0 1px 2px #000; }
+.br-gauge.is-ready .br-gauge-fill { background: linear-gradient(90deg, #7dffb0, #eafff1); box-shadow: 0 0 1cqw #7dffb0; }
+.br-gauge.is-full .br-gauge-stage { background: #ffbf3c; color: #2a1800; font-size: max(8px, .95cqw); }
+.br-gauge.is-full .br-gauge-fill { background: linear-gradient(90deg, #ff9d2e, #ffe08a); }
+.br-gauge.is-full .br-gauge-text { color: #ffe1a8; }
+
+/* 왼쪽 — 버스트 사용 내역. 새 것이 아래로 들어오고 위로 밀려 흐려진다 */
+.br-log { position: absolute; left: 1.2%; top: 14%; height: 44%; width: 25cqw; margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: .45cqw; pointer-events: none; }
+.br-log-row { display: flex; align-items: center; gap: .6cqw; padding: .3cqw 1cqw .3cqw .3cqw; border-radius: 99px;
+  background: linear-gradient(90deg, rgba(8,16,26,.82), rgba(8,16,26,.35)); color: #fff; transition: transform .15s; }
+.br-log-row.is-new { background: linear-gradient(90deg, rgba(120,70,0,.85), rgba(60,30,0,.35)); box-shadow: 0 0 1cqw rgba(255,180,60,.35); }
+.br-face { display: grid; place-items: center; flex: none; width: 2.4cqw; height: 2.4cqw; min-width: 18px; min-height: 18px;
+  border-radius: 50%; background: #34424f center 18% / cover no-repeat; color: #fff; font-size: 10px; font-weight: 800;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.3); }
+.br-log-stage { padding: .05cqw .55cqw; border-radius: 99px; background: rgba(255,191,60,.3); color: #ffd98a;
+  font: 900 max(9px, .95cqw) ui-monospace, monospace; }
+.br-log-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: max(10px, 1.05cqw); font-weight: 800; color: #ffe8c2; }
+
+.br-banner { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); padding: .4cqw 2.4cqw;
+  font: italic 900 max(16px, 3.4cqw) system-ui, sans-serif; letter-spacing: .06em; color: #fff4d6;
+  text-shadow: 0 0 1.4cqw rgba(255,160,40,.9), 0 .2cqw 0 #6b3a00; pointer-events: none; animation: br-banner .5s ease-out; }
+.br-banner[hidden] { display: none; }
+@keyframes br-banner { from { transform: translateX(-50%) scale(1.35); opacity: 0; } }
+
+/* 아래 — SD 다섯. 자리 i의 가운데 = 14% + 18% × i (코드의 사선 시작점과 같다) */
+.br-squad { position: absolute; left: 0; right: 0; bottom: 1%; height: 45%; pointer-events: none; }
+.br-slot { position: absolute; bottom: 0; left: calc(14% + var(--slot) * 18%); width: 15%; height: 100%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .3cqw;
+  padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; color: #fff; }
+.br-slot:focus-visible { outline: 2px solid #65d8e2; outline-offset: 2px; border-radius: 1cqw; }
+/* 높이 기준 — 머리카락·무기가 옆으로 넓은 캐릭터 SD도 같은 키로 선다(옆으로는 조금 넘쳐도 된다) */
+.br-sprite { width: auto; max-width: none; height: 76%; object-fit: contain; object-position: bottom center; transform-origin: 50% 100%;
+  filter: drop-shadow(0 .5cqw .6cqw rgba(0,0,0,.5)); transition: filter .15s; }
+.br-slot.is-firing .br-sprite { animation: br-recoil .14s linear infinite; }
+@keyframes br-recoil { 50% { transform: translateY(.25cqw) scale(.992); } }
+.br-slot.is-bursting .br-sprite { filter: drop-shadow(0 0 1.1cqw rgba(255,200,80,.95)) drop-shadow(0 .5cqw .6cqw rgba(0,0,0,.5)); }
+.br-slot.is-open .br-sprite { filter: drop-shadow(0 0 .9cqw rgba(101,216,226,.95)); }
+.br-mark { min-height: 1.4cqw; font: 900 max(8px, .95cqw) ui-monospace, monospace; letter-spacing: .06em; }
+.br-slot.is-reload .br-mark { padding: .1cqw .6cqw; border-radius: .3cqw; background: #b3141e; color: #fff; box-shadow: 0 0 .8cqw rgba(255,40,40,.5); }
+.br-card { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center; gap: .15cqw .5cqw;
+  width: 100%; padding: .35cqw .5cqw; border-radius: .7cqw; background: rgba(8,16,26,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+.br-card-face { grid-row: span 2; display: grid; place-items: center; width: 3cqw; height: 3cqw; min-width: 22px; min-height: 22px;
+  border-radius: .5cqw; background: #34424f center 18% / cover no-repeat; font-size: 10px; font-weight: 800; }
+.br-ammo { font: 800 max(9px, 1.05cqw) ui-monospace, monospace; text-align: left; }
+.br-slot.is-empty .br-ammo { color: #ff6b6b; }
+.br-ammo-bar { height: max(3px, .35cqw); border-radius: 99px; background: rgba(255,255,255,.14); overflow: hidden; }
+.br-ammo-fill { display: block; height: 100%; width: 100%; background: #4fc8ff; }
+.br-slot.is-reload .br-ammo-fill { background: #ff5a5a; }
+
+/* SD를 누르면 뜨는 버프 창 */
+/* 위를 기준으로 붙인다 — 재생 중 버프 수가 바뀌어도 머리줄(✕)이 제자리에 있다. 아래 기준이면 창이 줄고 늘며 ✕가 움직인다. */
+.br-buffs { position: absolute; top: 9%; left: clamp(1%, calc(14% + var(--slot) * 18% - 15%), 69%); width: 30%; max-height: 44%;
+  overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; padding: .8cqw; border-radius: .9cqw; background: rgba(8,16,26,.9); color: #e6f0f8;
+  box-shadow: 0 1cqw 3cqw rgba(0,0,0,.55), inset 0 0 0 1px rgba(101,216,226,.35); backdrop-filter: blur(4px); }
+.br-buffs[hidden] { display: none; }
+.br-buffs-head { position: sticky; top: -.8cqw; z-index: 1; display: flex; align-items: center; gap: .6cqw; margin: -.8cqw -.8cqw .5cqw;
+  padding: .8cqw .8cqw .4cqw; background: rgba(8,16,26,.96); font-size: max(11px, 1.1cqw); }
+.br-buffs-head span { color: #9fb2c4; font: 700 max(9px, .9cqw) ui-monospace, monospace; }
+.br-buffs-close { display: grid; place-items: center; min-width: max(24px, 2.2cqw); min-height: max(24px, 2.2cqw); margin-left: auto; padding: 0;
+  border: 0; border-radius: .4cqw; background: none; color: #9fb2c4; font-size: max(12px, 1.2cqw); cursor: pointer; }
+.br-buffs-close:hover { background: rgba(255,255,255,.1); color: #fff; }
+.br-buffs-empty { margin: .3cqw 0; color: #9fb2c4; font-size: max(10px, 1cqw); }
+.br-buffs-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .35cqw; }
+.br-buffs-list li { display: flex; align-items: center; gap: .55cqw; padding: .3cqw .4cqw; border-radius: .5cqw; background: rgba(255,255,255,.05); }
+.br-buff-caster { display: grid; place-items: center; flex: none; width: 1.9cqw; height: 1.9cqw; min-width: 16px; min-height: 16px;
+  border-radius: 50%; background: #34424f center 18% / cover no-repeat; font-size: 9px; }
+.br-buff-body { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.br-buff-body b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: max(10px, 1cqw); }
+.br-buff-body small { color: #9fd8ff; font-size: max(9px, .85cqw); }
+.br-buff-stack { color: #ffd98a; font: 800 max(9px, .9cqw) ui-monospace, monospace; font-style: normal; }
+.br-buff-left { color: #b9c9d8; font: 700 max(9px, .9cqw) ui-monospace, monospace; white-space: nowrap; }
+
+/* 재생 조작 */
+.br-controls { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.br-controls[hidden] { display: none; }
+.br-play, .br-speed { min-width: 44px; min-height: 36px; border: 1px solid rgba(101,216,226,.4); border-radius: 8px;
+  background: rgba(101,216,226,.12); color: #d9f4f2; font: 800 13px ui-monospace, monospace; cursor: pointer; }
+.br-play:hover, .br-speed:hover { background: rgba(101,216,226,.24); }
+.br-scrub { flex: 1; min-width: 0; accent-color: #4fc8ff; }
+.br-time { min-width: 92px; text-align: right; color: #b9c9d8; font: 700 12px ui-monospace, monospace; }
+
+/* ── 보스 패턴 ─────────────────────────────────────────────────────────── */
+/* 적을 누르는 자리 — 그림과 피격 범위를 덮는 투명 단추 */
+.br-enemy-hit { position: absolute; left: 50%; top: 37%; width: calc(24% * var(--dist, 1)); aspect-ratio: 1; transform: translate(-50%, -52%);
+  border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.br-enemy-hit:focus-visible { outline: 2px solid #65d8e2; outline-offset: 2px; }
+.br-enemy-hit.is-open { box-shadow: 0 0 0 max(2px, .2cqw) rgba(101,216,226,.7); }
+/* 족자 — 보스가 사라진다 */
+/* 피격 번쩍임은 칸마다 바뀌니 짧게, 사라질 때만 천천히 */
+.br-enemy { transition: opacity .25s ease, filter .06s linear; }
+.br-stage.is-immune .br-enemy { opacity: .12; filter: blur(.25cqw) grayscale(1); transition: opacity .25s ease, filter .25s ease; }
+.br-vanish { position: absolute; left: 50%; top: 37%; transform: translate(-50%, -50%); padding: .3cqw 1.2cqw; border-radius: 99px;
+  background: rgba(8,16,26,.7); color: #d3dbe2; font: 900 max(11px, 1.5cqw) system-ui, sans-serif; letter-spacing: .12em;
+  box-shadow: 0 0 0 1px rgba(211,219,226,.35); pointer-events: none; animation: br-vanish 1.6s ease-in-out infinite; }
+.br-vanish[hidden] { display: none; }
+@keyframes br-vanish { 50% { opacity: .55; } }
+.br-hitbox.is-immune { border-color: rgba(170,178,186,.6); background: none; box-shadow: none; }
+/* 속성 저지 — 그 속성 색의 방패 고리 */
+.br-hitbox.is-shielded { --shield: #7fc8ff; border-style: solid; border-color: var(--shield);
+  box-shadow: 0 0 0 max(3px, .35cqw) color-mix(in srgb, var(--shield) 35%, transparent), 0 0 2.2cqw var(--shield), inset 0 0 2.4cqw color-mix(in srgb, var(--shield) 40%, transparent); }
+.br-hitbox[data-element="작열"] { --shield: #ff5a3c; }
+.br-hitbox[data-element="수냉"] { --shield: #3fa9ff; }
+.br-hitbox[data-element="풍압"] { --shield: #4fe07a; }
+.br-hitbox[data-element="전격"] { --shield: #c86bff; }
+.br-hitbox[data-element="철갑"] { --shield: #ffc23c; }
+/* 코어 노출 */
+.br-core { position: absolute; left: 50%; top: 37%; width: calc(3.2cqw * var(--dist, 1)); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%;
+  border: max(2px, .22cqw) solid #ffd061; box-shadow: 0 0 1.4cqw rgba(255,208,97,.9), inset 0 0 .8cqw rgba(255,208,97,.6);
+  pointer-events: none; animation: br-core 1s ease-in-out infinite; }
+.br-core[hidden] { display: none; }
+@keyframes br-core { 50% { transform: translate(-50%, -50%) scale(1.18); } }
+/* 패턴 표 — 적 아래쪽 */
+.br-patterns { position: absolute; left: 50%; top: 53.5%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center;
+  gap: .4cqw; width: 46%; pointer-events: none; }
+.br-pattern { display: inline-flex; align-items: center; gap: .3cqw; padding: .25cqw .8cqw; border-radius: 99px;
+  background: rgba(8,16,26,.8); color: #e6f0f8; font: 800 max(9px, .95cqw) system-ui, sans-serif; white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+.br-pattern .inline-code-icons { margin-right: .1em; }
+.br-pattern.is-immune { color: #d3dbe2; box-shadow: inset 0 0 0 1px rgba(211,219,226,.5); }
+.br-pattern.is-element { color: #bfe3ff; box-shadow: inset 0 0 0 1px rgba(127,200,255,.6); }
+.br-pattern.is-core { color: #ffe2a0; box-shadow: inset 0 0 0 1px rgba(255,208,97,.6); }
+/* 신식 적정거리 — 거리(--dist = 기준 거리 ÷ 거리)만큼 보스·피격 범위·코어가 커지거나 작아진다 */
+.br-pattern.is-distance { color: #bff5ef; box-shadow: inset 0 0 0 1px rgba(101,216,226,.6); }
+.br-pattern.is-parts { color: #fff; background: rgba(160,40,20,.85); animation: br-banner .4s ease-out; }
+/* 적 위 — 걸린 버프·디버프 */
+.br-enemy-buffs { position: absolute; left: 50%; top: 12.5%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center;
+  gap: .35cqw; width: 34%; pointer-events: none; }
+.br-enemy-buff { position: relative; display: grid; place-items: center; width: 2.6cqw; height: 2.6cqw; min-width: 20px; min-height: 20px;
+  border-radius: .5cqw; background: rgba(90,10,20,.75); box-shadow: inset 0 0 0 max(1px, .12cqw) rgba(255,110,110,.8); }
+.br-enemy-buff-face { width: 84%; height: 84%; border-radius: .35cqw; background: #34424f center 18% / cover no-repeat; font-size: 9px; color: #fff;
+  display: grid; place-items: center; }
+.br-enemy-buff b { position: absolute; right: -.3cqw; bottom: -.3cqw; min-width: 1.3cqw; padding: 0 .2cqw; border-radius: 99px;
+  background: #ff5a5a; color: #fff; font: 900 max(8px, .8cqw) ui-monospace, monospace; text-align: center; }
+.br-enemy-face { background-size: contain; background-color: transparent; box-shadow: none; }
+.br-buffs.is-enemy { left: 35%; bottom: auto; top: 16%; }
+/* 진행 바 — 족자는 회색, 속성 저지는 파랑, 풀버스트는 노랑 */
+.br-progress-marks i.is-immune { background: rgba(200,208,216,.55); }
+.br-progress-marks i.is-element { background: rgba(80,170,255,.55); }
+
+/* ── SD 머리 위 차징 · 카드의 누적 딜 ─────────────────────────────────── */
+.br-charge { display: flex; flex-direction: column; align-items: center; gap: .15cqw; width: 64%; }
+.br-charge[hidden] { display: none; }
+.br-charge-text { color: #ffe9b8; font: 900 max(9px, 1.05cqw) ui-monospace, monospace; text-shadow: 0 1px 2px #000, 0 0 .6cqw rgba(0,0,0,.8); }
+.br-charge-bar { width: 100%; height: max(3px, .4cqw); border-radius: 99px; background: rgba(0,0,0,.55); overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+.br-charge-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffb13d, #ffe08a); }
+.br-charge.is-full .br-charge-fill { background: linear-gradient(90deg, #ff7a1a, #fff1c2); box-shadow: 0 0 .8cqw #ffc15a; }
+.br-charge.is-full .br-charge-text { color: #fff; }
+/* SD 머리 위 — 받는 버프(적 디버프 칩보다 작게). 누르기는 자리 단추가 받는다. */
+.br-slot-buffs { display: flex; flex-wrap: wrap; justify-content: center; gap: .22cqw; width: 100%; flex-shrink: 0; pointer-events: none; }
+.br-slot-buffs:empty { display: none; }
+.br-slot-buff { position: relative; display: grid; place-items: center; width: 1.5cqw; height: 1.5cqw; min-width: 10px; min-height: 10px;
+  border-radius: .3cqw; background: rgba(8,44,70,.78); box-shadow: inset 0 0 0 max(1px, .1cqw) rgba(101,216,226,.85); }
+.br-slot-buff-face { display: grid; place-items: center; width: 82%; height: 82%; border-radius: .22cqw;
+  background: #34424f center 18% / cover no-repeat; color: #fff; font-size: 7px; font-weight: 800; }
+.br-slot-buff b { position: absolute; right: -.28cqw; bottom: -.28cqw; min-width: .95cqw; padding: 0 .12cqw; border-radius: 99px;
+  background: #1f8fd0; color: #fff; font: 900 max(7px, .62cqw)/1.2 ui-monospace, monospace; text-align: center; }
+.br-slot-buff.is-more { width: auto; padding: 0 .3cqw; color: #bfeaff; font: 800 max(7px, .68cqw) ui-monospace, monospace; }
+
+/* 탄착 필터 — 무대 아래. 꺼진 칩은 흐리고 점선. 점 색은 탄흔 색과 같다. */
+.br-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.br-filter[hidden] { display: none; }
+.br-filter-label { margin-right: 2px; color: #9fb2c4; font-size: 12px; font-weight: 800; }
+.br-filter-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 160px; min-height: 30px; padding: 3px 10px;
+  border: 1px solid rgba(101,216,226,.4); border-radius: 99px; background: rgba(101,216,226,.12); color: #d9f4f2;
+  font: 700 12px system-ui, sans-serif; cursor: pointer; }
+.br-filter-chip:hover { background: rgba(101,216,226,.24); }
+.br-filter-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-filter-chip[data-replay-filter-char] { padding-left: 4px; }
+.br-filter-chip[aria-pressed="false"] { border-style: dashed; background: none; opacity: .5; }
+.br-filter-chip.is-all[aria-pressed="true"] { opacity: .6; cursor: default; }
+.br-filter-face { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: #34424f center 18% / cover no-repeat; color: #fff; font-size: 10px; font-weight: 800; }
+.br-filter-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 5px var(--dot); }
+.br-filter-chip.is-normal { --dot: #ff785a; }
+.br-filter-chip.is-core { --dot: #ffd061; }
+.br-filter-chip.is-skill { --dot: #c48cff; }
+.br-filter-sep { width: 1px; height: 18px; margin: 0 2px; background: rgba(146,176,201,.3); }
+
+.br-dealt { grid-column: 1 / -1; color: #ffe1a8; font: 800 max(9px, 1cqw) ui-monospace, monospace; text-align: center; letter-spacing: -.01em; }
+
+/* 멈춤 — 사격 반동·SD 흔들림·보스 깜빡임 등 반복 애니메이션을 모두 그 자리에 세운다. */
+.br-stage.is-paused, .br-stage.is-paused * { animation-play-state: paused !important; }

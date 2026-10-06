@@ -1,0 +1,1862 @@
+import { cubeDisplayName } from './cube-names';
+import { prependItemIcon, MODULE_ITEM } from './item-icons';
+import { t, tLabel, tName } from './i18n';
+import { rollLines } from './overload-roll';
+import {
+  canLock, changeCost, emptyLocks, overloadSimRng, rollEffectChange, rollValueChange,
+  type LockKind, type SimState,
+} from './overload-sim';
+import type {
+  BuffTargetRow,
+  CharacterControl,
+  CharacterOverrides,
+  CubeName,
+  EquipPart,
+  EquipSetting,
+  OverloadLine,
+  OverloadLines,
+  SettingsCatalog,
+  SkillLevels,
+} from './types';
+
+// 톡톡이를 직접 켤 때 채워지는 발사 속도(발/초) — 44톡톡이. 유저 지정값이다.
+// 220ms(≈4.5발/초)는 게임이 강제하는 하한이라 그 위는 사람이 낼 수 없다
+// (`context/CONTROL.md` §톡톡이).
+//
+// 참고: 엔진의 캐릭터별 «추천 자동» 컨트롤은 `data/char_defaults.json`에서 3.6을 쓰고
+// CONTROL.md는 실질 범위를 3.0~4.2로 적는다. 여기는 직접 켤 때의 출발값이라 별개다.
+const TAP_FIRE_DEFAULT = 4.4;
+// 풀차징컨을 켤 때 채워지는 딜레이(초). 유저 지정 기본값 — 엔진 `FULL_CHARGE_DELAY_DEFAULT`와 같다.
+const FULL_CHARGE_DELAY_DEFAULT = 0.1;
+const TAP_FIRE_HARD_LIMIT = 4.5;
+const WEAPON_MODE_SWAP_DEFAULT = 6;
+
+const EQUIP_PARTS: EquipPart[] = ['머리', '몸통', '팔', '다리'];
+
+/**
+ * 「복사」로 기억해 둔 부위 한 벌. **모듈에 둔다** — 카드가 다시 그려질 때마다 사라지면
+ * 머리에서 복사해 다리에 붙이는 일이 애초에 안 되고, 카드를 옮겨 다니며 붙일 수도 있다.
+ */
+let copiedPart: OverloadLine[] | null = null;
+// 내부 부위 키는 '팔'이지만 UI·CSV 표기는 '장갑'이다.
+const EQUIP_PART_LABELS: Record<EquipPart, string> = {
+  머리: '머리', 몸통: '몸통', 팔: '장갑', 다리: '다리',
+};
+
+const skillLabels: Array<[keyof SkillLevels, string]> = [
+  ['1', '스킬 1'],
+  ['2', '스킬 2'],
+  ['3', '버스트'],
+];
+
+const numberText = (value: number, digits = 2): string => value.toFixed(digits);
+
+/** 글자 한 조각. 같은 모양을 열 번 넘게 쓰므로 한 줄로 묶는다. */
+const textSpan = (text: string, className?: string): HTMLSpanElement => {
+  const node = document.createElement('span');
+  node.textContent = text;
+  if (className) node.className = className;
+  return node;
+};
+
+const cloneOverrides = (value: CharacterOverrides): CharacterOverrides => ({
+  ...(value.growthStage !== undefined ? { growthStage: value.growthStage } : {}),
+  ...(value.skillLevels ? { skillLevels: { ...value.skillLevels } } : {}),
+  ...(value.overload ? { overload: { ...value.overload } } : {}),
+  ...(value.cube ? { cube: { ...value.cube } } : {}),
+  ...(value.collection ? { collection: { ...value.collection } } : {}),
+  ...(value.control !== undefined ? {
+    control: Object.fromEntries(
+      Object.entries(value.control).map(([key, entry]) => [key, typeof entry === 'string' ? entry : { ...entry }]),
+    ) as CharacterControl,
+  } : {}),
+  ...(value.manualStats ? { manualStats: { ...value.manualStats } } : {}),
+  ...(value.burst ? { burst: value.burst } : {}),
+  ...(value.equipLevels ? { equipLevels: { ...value.equipLevels } } : {}),
+  // 부위별 오버로드 줄. 여기 빠지면 값을 하나 고칠 때마다 나머지가 조용히 지워진다 —
+  // 이 함수를 지나지 않는 경로가 없기 때문이다.
+  ...(value.overloadLines ? {
+    overloadLines: Object.fromEntries(
+      Object.entries(value.overloadLines).map(([part, rows]) => [
+        part, (rows ?? []).map((line) => ({ ...line })),
+      ]),
+    ) as OverloadLines,
+  } : {}),
+  ...(value.weaponModeSwapAt !== undefined ? { weaponModeSwapAt: value.weaponModeSwapAt } : {}),
+});
+
+/**
+ * 버프 대상이 전투 중 갈렸나. 발동 시각마다 받은 사람 묶음을 모아, 묶음이 모두 같으면 갈리지 않았다.
+ * 발동 기록이 없는 예전 결과는 «받은 사람이 둘 이상»으로 본다.
+ */
+export function buffTargetsVary(row: BuffTargetRow): boolean {
+  if (!row.sequence?.length) return row.targets.length > 1;
+  const casts = new Map<number, Set<string>>();
+  for (const { t: at, target } of row.sequence) {
+    if (!casts.has(at)) casts.set(at, new Set());
+    casts.get(at)!.add(target);
+  }
+  const keys = [...casts.values()].map((set) => [...set].sort().join('\u0000'));
+  return keys.some((key) => key !== keys[0]);
+}
+
+export function defaultCharacterOverrides(
+  name: string,
+  catalog: SettingsCatalog,
+): CharacterOverrides {
+  const defaults = catalog.characters[name];
+  if (!defaults) throw new Error(`${name}: 기본 장비 설정을 찾을 수 없습니다.`);
+  return {
+    growthStage: defaults.growthStage,
+    skillLevels: { ...defaults.skillLevels },
+    overload: { ...defaults.overload },
+    cube: { ...defaults.cube },
+    collection: { ...defaults.collection },
+    manualStats: {},
+  };
+}
+
+function makeInputUnit(input: HTMLInputElement, unit: string): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'input-unit';
+  wrap.append(input);
+  if (unit) {
+    const suffix = document.createElement('em');
+    suffix.textContent = unit;
+    wrap.append(suffix);
+  }
+  return wrap;
+}
+
+function summaryText(name: string, catalog: SettingsCatalog, value?: CharacterOverrides): string {
+  const defaults = catalog.characters[name];
+  if (!defaults) return '설정 정보 없음';
+  const skillLevels = value?.skillLevels ?? defaults.skillLevels;
+  const overload = value?.overload ?? defaults.overload;
+  const cube = value?.cube ?? defaults.cube;
+  const growthStage = value?.growthStage ?? defaults.growthStage;
+  const controlSummary = value?.control === undefined
+    ? '컨트롤 추천 자동'
+    : `컨트롤 직접 ${Object.keys(value.control).length}개`;
+  const growth = defaults.growthOptions.find((option) => option.value === growthStage)
+    ?? { value: growthStage, label: `단계 ${growthStage}`, affinity: 0 };
+  const skillSummary = defaults.skillLevelsLocked
+    ? '수치 미공개 · Lv10 고정'
+    : `스킬 ${skillLevels['1']} / ${skillLevels['2']} / ${skillLevels['3']}`;
+  return `${value ? '개별값' : '기본값'} · ${growth.label} · 호감도 ${growth.affinity} · ${skillSummary} · `
+    + `우코 ${numberText(overload.element_bonus ?? 0)} · `
+    + `공증 ${numberText(overload.atk_pct ?? 0)} · 장탄 ${numberText(overload.max_ammo_pct ?? 0)} · `
+    + `${cube.name === NO_CUBE ? '큐브 없음' : `${cube.name} Lv${cube.level}`} · ${controlSummary}`;
+}
+
+/**
+ * 컨트롤 키의 한글 이름. 판의 체크박스에 적히는 말과 **같은 말**을 쓴다 —
+ * 추천 줄에서 「tap_fire」라고 읽고 아래에서 「톡톡이」를 찾으면 같은 것인 줄 모른다.
+ */
+export const CONTROL_NAMES: Record<string, string> = {
+  tap_fire: '톡톡이',
+  full_charge: '풀차징컨',
+  hold: '홀드 컨트롤',
+  reload: '재장전 컨트롤',
+  cover: '버스트 엄폐 컨트롤',
+  bunny_mode: '바니 모드',
+};
+
+/** 컨트롤 키 → 한글. 모르는 키는 그대로 둔다(새 컨트롤이 생겨도 빈칸이 되지 않는다). */
+export const controlName = (key: string): string => CONTROL_NAMES[key] ?? key;
+
+/**
+ * 「지금 이 조합에서 실제로 걸리는 컨트롤」 문구.
+ *
+ * 캐릭터별 기본 컨트롤에는 **조합 조건부**가 있다(아인은 에이다와 함께일 때 홀드가
+ * 붙는다). 예전에는 조건 없는 것만 적고 「조합에 따라 추가됩니다」로 얼버무려,
+ * 실제로 걸려 있는 홀드를 아무도 볼 수 없었다 — 그래서 «홀드를 켰는데 결과가
+ * 그대로»라는 말이 나왔다. 이미 걸려 있었기 때문이다.
+ *
+ * `squad`를 주지 않으면(이 모듈만 따로 그리는 곳) 조건 없는 것만 적는다.
+ */
+export function recommendedControlText(
+  defaults: { recommendedControl: CharacterControl; hasConditionalControl: boolean;
+    conditionalControl?: Array<{ withMembers: string[]; control: CharacterControl }> },
+  squad?: string[],
+): string {
+  const names = Object.keys(defaults.recommendedControl).map(controlName);
+  const rules = defaults.conditionalControl ?? [];
+  const roster = new Set((squad ?? []).filter(Boolean));
+  let unresolved = !defaults.hasConditionalControl ? false : rules.length === 0;
+  for (const rule of rules) {
+    const who = rule.withMembers.find((member) => roster.has(member));
+    if (!who) { unresolved = unresolved || squad === undefined; continue; }
+    for (const key of Object.keys(rule.control)) {
+      names.push(`${controlName(key)}(${who}와 함께라서)`);
+    }
+  }
+  const head = names.length ? `현재 기본 추천: ${names.join(' · ')}` : '현재 기본 추천: 자동 사격';
+  return unresolved ? `${head} · 스쿼드 조합에 따라 추천 컨트롤이 추가됩니다.` : head;
+}
+
+/** 조합 조건부 컨트롤 한 줄 — 지금 걸렸는지와, 왜 걸리는지. */
+export interface ControlRuleNote {
+  /** 지금 이 스쿼드에서 실제로 걸려 있는가. */
+  active: boolean;
+  /** 「에이다와 함께라서 홀드 컨트롤이 걸려 있습니다」 같은 한 줄. */
+  headline: string;
+  /** 왜 그렇게 하는지. 데이터에 적힌 설명이 없으면 비어 있다. */
+  help: string;
+}
+
+/**
+ * 조합으로 붙는 컨트롤을 **왜 붙는지까지** 풀어 쓴다.
+ *
+ * 이 컨트롤들은 아무도 켠 적이 없는데 걸린다 — 그래서 「홀드를 켰는데 결과가 그대로」,
+ * 「추천에 없는 게 왜 도나」 같은 오해가 나온다. 걸린 것은 걸렸다고, 아직 아닌 것은
+ * 무엇과 함께 두면 걸리는지 적어 둔다.
+ *
+ * 설명은 데이터가 들고 온다(`data/char_defaults.json`의 `_help`) — 화면이 지어내지 않는다.
+ */
+/**
+ * 받침에 맞춰 조사를 고른다 — 「홀드 컨트롤이」와 「톡톡이가」.
+ *
+ * 「이(가)」로 뭉개는 편이 짧지만, 카드 안에서 매번 읽히는 문장이라 그대로 두면
+ * 눈에 걸린다. 한글이 아닌 글자로 끝나면(숫자·영문) 받침이 있는 쪽으로 본다.
+ */
+export function withParticle(word: string, withFinal: string, without: string): string {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  const hangul = code >= 0xac00 && code <= 0xd7a3;
+  const hasFinal = hangul ? (code - 0xac00) % 28 !== 0 : true;
+  return `${word}${hasFinal ? withFinal : without}`;
+}
+
+export function controlRuleNotes(
+  defaults: { conditionalControl?: Array<{ withMembers: string[]; control: CharacterControl; help?: string }> },
+  squad?: string[],
+): ControlRuleNote[] {
+  const roster = new Set((squad ?? []).filter(Boolean));
+  return (defaults.conditionalControl ?? []).map((rule) => {
+    const names = Object.keys(rule.control).map(controlName).join(' · ');
+    const here = rule.withMembers.find((member) => roster.has(member));
+    const who = here ?? rule.withMembers.join(' 또는 ');
+    const subject = withParticle(names, '이', '가');
+    return {
+      active: Boolean(here),
+      headline: here
+        ? `${withParticle(who, '과', '와')} 함께라서 ${subject} 걸려 있습니다.`
+        : `${withParticle(who, '과', '와')} 함께 편성하면 ${subject} 자동으로 붙습니다.`,
+      help: rule.help ?? '',
+    };
+  });
+}
+
+/** 오버로드는 부위마다 세 줄이다 — 강화 단계와 묶지 않고 늘 세 줄을 연다. */
+export const OVERLOAD_LINES_PER_PART = 3;
+
+/** 빈 줄 하나. 옵션이 비어 있으면 레벨은 세지 않는다. */
+const emptyLine = (): OverloadLine => ({ option: '', level: 10 });
+
+/** 부위마다 세 줄씩, 모자란 자리는 빈 줄로 채운 판. */
+export function overloadLinesOf(value?: OverloadLines): Record<EquipPart, OverloadLine[]> {
+  const out = {} as Record<EquipPart, OverloadLine[]>;
+  for (const part of EQUIP_PARTS) {
+    const rows = value?.[part] ?? [];
+    out[part] = Array.from({ length: OVERLOAD_LINES_PER_PART }, (_, index) => {
+      const row = rows[index];
+      return row ? { option: row.option, level: row.level } : emptyLine();
+    });
+  }
+  return out;
+}
+
+/**
+ * 줄들 → 옵션별 합계. **엔진이 받는 값은 예전 그대로 합계다** — 사람이 고르는 단위만
+ * 줄로 바뀌고, 계산·저장·공유 코드는 하나도 달라지지 않는다.
+ *
+ * 소수 셋째 자리에서 끊는다: 표 값이 소수 둘째 자리라 그냥 더하면 부동소수 찌꺼기가
+ * 붙어(88.60000000000001) 저장값이 지저분해진다.
+ */
+export function overloadTotals(
+  lines: Record<EquipPart, OverloadLine[]>,
+  steps: Record<string, number[]>,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const part of EQUIP_PARTS) {
+    for (const line of lines[part]) {
+      const table = steps[line.option];
+      if (!line.option || !table) continue;
+      const value = table[Math.min(Math.max(1, line.level), table.length) - 1] ?? 0;
+      totals[line.option] = Math.round(((totals[line.option] ?? 0) + value) * 1000) / 1000;
+    }
+  }
+  return totals;
+}
+
+/** 줄이 하나라도 채워져 있는가. 비어 있으면 직접 입력한 값을 그대로 둔다. */
+export const hasOverloadLines = (value?: OverloadLines): boolean =>
+  EQUIP_PARTS.some((part) => (value?.[part] ?? []).some((line) => line.option));
+
+/** 큐브를 끼지 않은 상태. 데이터가 아니라 화면이 만드는 선택지다. */
+export const NO_CUBE = '없음';
+
+/** 막바지 최우선의 기본 구간(초). 엔진 기본값(`calculator/customization.py`)과 같다. */
+const ENDGAME_DEFAULT = 20;
+
+/** 창으로 여는 설정 뭉치의 종류. 컨트롤은 카드에서 그 자리에 펼친다. */
+export type CharPanelKind = 'settings';
+
+/**
+ * 컨트롤 칩에 적히는 한 줄. **열지 않아도 지금 상태를 읽을 수 있어야** 칩이 값을 한다 —
+ * 대부분은 «추천 자동 · 버스트 자동»이라 열어 볼 일이 없다.
+ */
+export function controlChipText(value?: CharacterOverrides): string {
+  const picked = value?.control === undefined ? -1 : Object.keys(value.control).length;
+  // 하나도 안 고른 «직접»은 «직접 0개»가 아니라 그냥 직접이다 — 0을 세어 보일 이유가 없다.
+  const control = picked < 0 ? '추천 자동' : picked === 0 ? '직접 설정' : `직접 ${picked}개`;
+  const burst = value?.burst;
+  const burstText = burst === undefined ? '버스트 자동'
+    : burst.mode === 'priority' ? `버스트 ${burst.every}의 배수`
+    : burst.mode === 'endgame' ? `버스트 막바지 ${burst.seconds}초`
+    : '버스트 안 씀';
+  const bunny = value?.control?.bunny_mode;
+  return `${control}${bunny ? ` · ${bunny === 'engage' ? '인게이지' : '스탠스'}` : ''} · ${burstText}`;
+}
+
+/**
+ * 지난번에 그린 «창으로 여는» 뭉치들. 창으로 띄우면 그 뭉치는 카드 밖(모달)으로
+ * 옮겨 가므로, 다시 그릴 때 카드만 뒤져서는 펼침 상태를 찾을 수 없다 — 고급 모드를
+ * 켜 둔 채 «수치 추가»를 누르면 고급 모드가 꺼져 보이던 게 그 탓이다.
+ */
+const lastPanels = new WeakMap<HTMLElement, HTMLElement[]>();
+
+/**
+ * 소장품 목록을 전부 편 캐릭터. 「직접 고르기」를 한 번 고르면 그 화면이 살아 있는
+ * 동안 계속 펴 둔다 — 값을 하나 고칠 때마다 다시 접히면 두 번은 못 고른다.
+ */
+const collectionAllRequested = new Set<string>();
+
+/**
+ * 오버로드작 시뮬레이션이 켜진 캐릭터의 상태. 카드는 값이 바뀔 때마다 다시 그려지므로
+ * 잠금·소모 합계·처음 줄은 카드 밖에서 산다. 끝내면 지운다.
+ */
+const overloadSims = new Map<string, SimState>();
+
+/**
+ * 「최적옵작」 창을 여는 자리. 판을 돌리려면 덱과 계산 스레드가 있어야 해서 계산기(ui.ts)가
+ * 채운다 — 비어 있으면(이 모듈만 따로 그리는 곳) 단추를 내지 않는다.
+ */
+let overloadOptimizer: ((name: string, value: CharacterOverrides) => void) | null = null;
+export function setOverloadOptimizer(open: ((name: string, value: CharacterOverrides) => void) | null): void {
+  overloadOptimizer = open;
+}
+
+export function renderCharacterSettings(
+  container: HTMLElement,
+  name: string,
+  catalog: SettingsCatalog,
+  value: CharacterOverrides | undefined,
+  onChange: (next: CharacterOverrides | undefined) => void,
+  buffTargets?: BuffTargetRow[],
+  onShowOrder?: (row: BuffTargetRow) => void,
+  /**
+   * 설정 뭉치를 **창으로** 여는 자리. 안 주면 그 자리에서 펼친다 —
+   * 이 모듈만 따로 그리는 곳(테스트·미리보기)에서도 쓸 수 있어야 한다.
+   */
+  onOpenPanel?: (kind: CharPanelKind, panel: HTMLElement, label: string) => void,
+  /**
+   * 지금 편성된 스쿼드 전원. **조합 조건부 컨트롤을 판정하는 데만** 쓴다 —
+   * 안 주면 조건 없는 추천만 적고 예전처럼 «조합에 따라 추가됩니다»로 알린다.
+   */
+  squad?: string[],
+  /**
+   * 불러온 육성 프로필의 이 캐릭터 값. 있으면 「수치 설정」 안에 되돌리기 단추를 낸다 —
+   * 손으로 만지다 원래대로 되돌리고 싶을 때 하나씩 다시 적을 수는 없다.
+   *
+   * `label`을 밖에서 받는 이유는 **출처를 아는 쪽이 밖이기 때문**이다(블라블라링크 ·
+   * 렛츠도로 CSV). 이 모듈은 「어디서 왔는지」를 모른 채 그리기만 한다.
+   */
+  restore?: { label: string; value: CharacterOverrides } | null,
+): void {
+  // 지난번 화면을 찾는다. 카드 안이 먼저고, 없으면 창으로 옮겨 간 뭉치까지 뒤진다.
+  const previous = <T extends Element>(selector: string): T | null => {
+    const inCard = container.querySelector<T>(selector);
+    if (inCard) return inCard;
+    for (const panel of lastPanels.get(container) ?? []) {
+      const hit = panel.querySelector<T>(selector);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const advancedWasOpen = previous<HTMLInputElement>('[data-advanced-toggle]')?.checked ?? false;
+  const searchWas = previous<HTMLInputElement>('[data-manual-search]')?.value ?? '';
+  // 펼침 상태는 다시 그려도 유지한다. 값을 하나 바꿀 때마다 접히면 쓸 수 없다.
+  // 기본값은 **접힘**이다 — 카드 다섯 장이 한 화면에 서니, 켜 두기만 한 설정까지
+  // 늘 펼쳐져 있으면 편성 자체가 안 보인다.
+  const wasOpen = (flag: string): boolean =>
+    previous<HTMLElement>(`[${flag}]`)?.getAttribute('aria-expanded') === 'true';
+  const summaryWasOpen = wasOpen('data-loadout-open');
+  const controlWasOpen = wasOpen('data-control-open');
+  // 접이판 상태는 **카드를 비우기 전에** 읽어 둔다. 아래에서 다시 그릴 때는 옛 화면이
+  // 이미 지워져 있어, 그때 찾아서는 늘 «접힘»만 나온다.
+  const openNotes = new Set(
+    [...container.querySelectorAll<HTMLDetailsElement>('[data-note-fold]')]
+      .filter((fold) => fold.open)
+      .map((fold) => fold.dataset.noteFold!),
+  );
+
+  /**
+   * 눌러서 여는 설정 뭉치. 카드가 좁아 그 자리에서 펼치면 다섯 장이 서로를 밀어낸다 —
+   * 필터 판처럼 창으로 띄운다. 창을 못 여는 자리에서는 제자리 펼치기로 물러난다.
+   */
+  const panelOpener = (label: string, kind: CharPanelKind, short = label) => {
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'char-panel-open';
+    head.dataset.charPanelOpen = kind;
+    head.setAttribute('aria-expanded', 'false');
+    // 카드에는 짧은 이름을, 창 제목에는 온전한 이름을 쓴다 — 좁은 칸에서 라벨이
+    // 줄줄이 깨지면 무엇을 여는 단추인지부터 읽히지 않는다.
+    const title = document.createElement('span');
+    title.className = 'disclosure-label';
+    title.textContent = short;
+    title.title = label;
+    const hint = document.createElement('span');
+    hint.className = 'disclosure-hint';
+    hint.textContent = '›';
+    head.append(title, hint);
+    const panel = document.createElement('div');
+    panel.className = 'disclosure-panel char-panel';
+    panel.dataset.charPanel = kind;
+    panel.hidden = true;
+    head.addEventListener('click', () => {
+      if (onOpenPanel) { onOpenPanel(kind, panel, label); return; }
+      const next = head.getAttribute('aria-expanded') !== 'true';
+      head.setAttribute('aria-expanded', String(next));
+      panel.hidden = !next;
+      hint.textContent = next ? '접기' : '열기';
+    });
+    return { head, panel };
+  };
+
+  container.replaceChildren();
+  container.className = 'character-settings';
+
+  const commit = (next: CharacterOverrides | undefined) => {
+    onChange(next);
+    renderCharacterSettings(
+      container, name, catalog, next, onChange, buffTargets, onShowOrder, onOpenPanel, squad, restore);
+  };
+
+  // 카드가 좁아졌다 — 요약(«1돌 · 호감도 20 · 스킬 10…»)과 버프 수령자는 접어 두고
+  // 필요한 사람만 펼친다. 편성 화면에서 늘 읽는 줄은 아니다.
+  const summaryFold = document.createElement('button');
+  summaryFold.type = 'button';
+  summaryFold.className = 'loadout-open';
+  summaryFold.dataset.loadoutOpen = '';
+  summaryFold.setAttribute('aria-expanded', String(summaryWasOpen));
+  summaryFold.append(document.createTextNode('개별값'));
+  const summaryCaret = document.createElement('b');
+  summaryCaret.className = 'loadout-caret';
+  summaryCaret.textContent = summaryWasOpen ? '▴' : '▾';
+  summaryFold.append(summaryCaret);
+  const summaryBox = document.createElement('div');
+  summaryBox.className = 'loadout-fold';
+  summaryBox.dataset.loadoutFold = '';
+  summaryBox.hidden = !summaryWasOpen;
+  summaryFold.addEventListener('click', () => {
+    const next = summaryFold.getAttribute('aria-expanded') !== 'true';
+    summaryFold.setAttribute('aria-expanded', String(next));
+    summaryBox.hidden = !next;
+    summaryCaret.textContent = next ? '▴' : '▾';
+  });
+  const settingsRow = document.createElement('div');
+  settingsRow.className = 'settings-row';
+  settingsRow.append(summaryFold);
+  container.append(settingsRow, summaryBox);
+
+  const summary = document.createElement('p');
+  summary.className = 'loadout-summary';
+  summary.dataset.loadoutSummary = '';
+  summary.textContent = summaryText(name, catalog, value);
+  summaryBox.append(summary);
+
+  // 「누가 이 버프를 받았나」. 대상이 공격력 순위로 갈려 편성만 보고는 알 수 없고
+  // 전투 중에 바뀌기도 해서, 추정하지 않고 **실제 발동 로그**의 수령자를 띄운다.
+  // 계산을 돌리기 전에는 아직 알 수 없으므로 빈 괄호로 자리만 잡는다.
+  //
+  // 접이(개별값) **밖**에 세운다. 리버렐리오·미란다처럼 대상이 갈리는 버프는
+  // 결과를 읽는 데 필요한 정보이지 내 육성값이 아니다 — 펴 보지 않으면 못 보는
+  // 자리에 두면 있는 줄도 모른다.
+  const buffTargetList = document.createElement('div');
+  buffTargetList.className = 'buff-target-list';
+  for (const row of buffTargets ?? []) {
+    const box = document.createElement('p');
+    box.className = 'buff-target';
+    box.dataset.buffTarget = row.buff;
+    const label = document.createElement('span');
+    // 이름표는 데이터가 주는 「<버프 이름> 대상」이다. 앞의 이름은 게임사가 정한
+    // 것이라 이름표에서 가져오고(`차분한 수심`), 「크확」처럼 우리가 줄여 쓴 말은
+    // 사전에서 가져온다 — 그래서 `tLabel`을 지난다.
+    const named = /^(.*) 대상$/.exec(row.label);
+    label.textContent = named
+      ? `${t('{name} 대상', { name: tLabel(named[1]!) })} : `
+      : `${tLabel(row.label)} : `;
+    box.append(label);
+    const who = document.createElement('b');
+    // 대상이 전투 중 갈리면 이름을 나열해도 읽히지 않는다 — 특이케이스로 접고
+    // 실제 순서는 「순서보기」로 넘긴다. **한 번에 여럿이 받는** 버프(미란다 애장품 「파워 업!」은
+    // 공격력 상위 2명)는 발동마다 같은 묶음이면 갈린 게 아니므로 이름을 그대로 보인다.
+    const special = buffTargetsVary(row);
+    // 미리 계산은 배경에서 돈다. 빈 괄호만 보이면 기능이 꺼진 것처럼 보이므로
+    // 도는 동안은 그렇다고 적는다.
+    who.textContent = row.pending ? t('[계산중]')
+      : special ? t('[특이케이스]')
+        : `[${row.targets.map(tName).join(', ')}]`;
+    if (row.pending) box.classList.add('is-pending');
+    box.append(who);
+    const buff = tName(row.buff);
+    box.title = row.pending
+      ? t('{buff} — 대상을 계산하는 중입니다', { buff })
+      : row.targets.length === 0
+        ? t('{buff} — 아직 계산하지 않았거나 발동 조건이 맞지 않습니다', { buff })
+        : special
+          ? t('{buff} — {n}회 발동 · 대상이 {people}명 사이에서 갈립니다',
+            { buff, n: row.count, people: row.targets.length })
+          : t('{buff} — {n}회 발동', { buff, n: row.count });
+
+    // 순서보기는 대상이 갈릴 때만 — 고정 대상은 이름만으로 충분하다.
+    if (onShowOrder && special && (row.sequence?.length ?? 0) > 0) {
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'buff-order-open';
+      open.dataset.buffOrderOpen = row.buff;
+      open.textContent = '순서보기';
+      open.addEventListener('click', () => onShowOrder(row));
+      box.append(open);
+    }
+    buffTargetList.append(box);
+  }
+  if (buffTargetList.childElementCount > 0) container.append(buffTargetList);
+
+  const toggleLabel = document.createElement('label');
+  toggleLabel.className = 'inline-check';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.checked = Boolean(value);
+  toggle.dataset.customToggle = '';
+  const toggleText = document.createElement('span');
+  toggleText.textContent = '개별 설정';
+  toggleLabel.append(toggle, toggleText);
+  settingsRow.append(toggleLabel);
+  toggle.addEventListener('change', () => {
+    commit(toggle.checked ? defaultCharacterOverrides(name, catalog) : undefined);
+  });
+
+  if (!value) return;
+  let current = cloneOverrides(value);
+  const defaults = catalog.characters[name];
+  if (!defaults) return;
+  current.growthStage ??= defaults.growthStage;
+  current.skillLevels ??= { ...defaults.skillLevels };
+  current.overload ??= { ...defaults.overload };
+  current.cube ??= { ...defaults.cube };
+  current.collection ??= { ...defaults.collection };
+  current.manualStats ??= {};
+  /** 컨트롤 칩의 글을 지금 값으로 고쳐 쓴다. 칩이 만들어진 뒤에 채워진다. */
+  let paintControlChip: () => void = () => undefined;
+
+  /**
+   * 긴 안내문을 접어 둔다. 카드 폭(약 130px)에서는 네 문장이 열 줄을 넘겨,
+   * 정작 만지러 온 체크박스가 화면 밖으로 밀린다. 읽고 싶을 때만 편다 —
+   * 펼침 상태는 다시 그려도 남는다.
+   */
+  const foldedNote = (label: string, note: HTMLElement, key: string): HTMLElement => {
+    const fold = document.createElement('details');
+    fold.className = 'note-fold';
+    fold.dataset.noteFold = key;
+    fold.open = openNotes.has(key);
+    const head = document.createElement('summary');
+    head.textContent = label;
+    fold.append(head, note);
+    return fold;
+  };
+
+  const emitNumericChange = (next: CharacterOverrides) => {
+    current = cloneOverrides(next);
+    onChange(current);
+    summary.textContent = summaryText(name, catalog, current);
+    // 버스트를 바꾸면 카드를 다시 그리지 않는다 — 칩에 적힌 글은 여기서 따라간다.
+    paintControlChip();
+  };
+
+  const body = document.createElement('div');
+  body.className = 'character-settings-body';
+  body.dataset.characterSettingsBody = '';
+
+  const growthEditor = document.createElement('section');
+  growthEditor.className = 'growth-editor';
+  const growthHeading = document.createElement('h4');
+  growthHeading.textContent = `돌파 · 코어 강화 (${defaults.rarity})`;
+  const growthSelect = document.createElement('select');
+  growthSelect.dataset.growthStage = '';
+  for (const growth of defaults.growthOptions) {
+    const option = document.createElement('option');
+    option.value = String(growth.value);
+    option.textContent = growth.label;
+    growthSelect.append(option);
+  }
+  growthSelect.value = String(current.growthStage);
+  growthSelect.addEventListener('change', () => {
+    const next = cloneOverrides(current);
+    next.growthStage = Number(growthSelect.value);
+    commit(next);
+  });
+  const growthNote = document.createElement('p');
+  growthNote.textContent = '호감도는 돌파별 최대치로 적용합니다.';
+  growthEditor.append(growthHeading, growthSelect, growthNote);
+  body.append(growthEditor);
+
+  const skillEditor = document.createElement('section');
+  skillEditor.className = 'skill-level-editor';
+  const skillHeading = document.createElement('h4');
+  skillHeading.textContent = '스킬 레벨';
+  skillEditor.append(skillHeading);
+  if (defaults.skillLevelsLocked) {
+    skillEditor.classList.add('is-locked');
+    skillEditor.dataset.skillLevelsLocked = '';
+    const locked = document.createElement('strong');
+    locked.textContent = '수치 미공개 · Lv10 고정';
+    const explanation = document.createElement('p');
+    explanation.textContent = '1~9레벨 계수가 공개되지 않아 Lv10 기준으로만 계산합니다.';
+    skillEditor.append(locked, explanation);
+  } else {
+    const skillControls = document.createElement('div');
+    skillControls.className = 'skill-level-controls';
+    for (const [key, labelText] of skillLabels) {
+      const label = document.createElement('label');
+      const text = document.createElement('span');
+      text.textContent = labelText;
+      const select = document.createElement('select');
+      select.dataset.skillLevel = key;
+      for (let level = 1; level <= 10; level += 1) {
+        const option = document.createElement('option');
+        option.value = String(level);
+        option.textContent = `Lv${level}`;
+        select.append(option);
+      }
+      select.value = String(current.skillLevels[key]);
+      select.addEventListener('change', () => {
+        const next = cloneOverrides(current);
+        next.skillLevels![key] = Number(select.value);
+        emitNumericChange(next);
+      });
+      label.append(text, select);
+      skillControls.append(label);
+    }
+    skillEditor.append(skillControls);
+  }
+  body.append(skillEditor);
+
+  const burstEditor = document.createElement('section');
+  burstEditor.className = 'burst-editor';
+  const burstHeading = document.createElement('h4');
+  burstHeading.textContent = '버스트 운용';
+  const burstMode = current.burst?.mode ?? 'auto';
+  const burstEvery = current.burst?.mode === 'priority' ? current.burst.every : 1;
+  const burstLast = current.burst?.mode === 'endgame' ? current.burst.seconds : ENDGAME_DEFAULT;
+
+  const burstRow = document.createElement('div');
+  burstRow.className = 'burst-settings-row';
+  const burstSelect = document.createElement('select');
+  burstSelect.dataset.burstAssignment = '';
+  for (const [optionValue, optionLabel] of [
+    ['auto', '자동'], ['priority', 'n의 배수 우선 사용'],
+    ['endgame', '막바지 최우선'], ['skip', '안 씀'],
+  ] as Array<[string, string]>) {
+    const option = document.createElement('option');
+    option.value = optionValue;
+    option.textContent = optionLabel;
+    burstSelect.append(option);
+  }
+  burstSelect.value = burstMode;
+
+  const everyWrap = document.createElement('label');
+  everyWrap.className = 'burst-every';
+  everyWrap.hidden = burstMode !== 'priority';
+  const everyInput = document.createElement('input');
+  everyInput.type = 'number';
+  everyInput.min = '1';
+  everyInput.step = '1';
+  everyInput.value = String(burstEvery);
+  everyInput.dataset.burstEvery = '';
+  const everyText = document.createElement('span');
+  everyText.textContent = '의 배수 사이클마다';
+  everyWrap.append(everyInput, everyText);
+
+  // 막바지 최우선 — 큰 한 방을 전투 끝에 맞추려는 운용이다.
+  const lastWrap = document.createElement('label');
+  lastWrap.className = 'burst-every';
+  lastWrap.hidden = burstMode !== 'endgame';
+  const lastText = document.createElement('span');
+  lastText.textContent = '남은 시간';
+  const lastInput = document.createElement('input');
+  lastInput.type = 'number';
+  lastInput.min = '1';
+  lastInput.max = '180';
+  lastInput.step = '1';
+  lastInput.value = String(burstLast);
+  lastInput.dataset.burstLast = '';
+  const lastUnit = document.createElement('span');
+  lastUnit.textContent = '초 미만일 때';
+  lastWrap.append(lastText, lastInput, lastUnit);
+
+  burstRow.append(burstSelect, everyWrap, lastWrap);
+
+  const applyBurst = () => {
+    const next = cloneOverrides(current);
+    const mode = burstSelect.value;
+    if (mode === 'priority') {
+      const n = Math.max(1, Math.trunc(Number(everyInput.value) || 1));
+      next.burst = { mode: 'priority', every: n };
+    } else if (mode === 'endgame') {
+      const seconds = Math.min(180, Math.max(1, Math.trunc(Number(lastInput.value) || ENDGAME_DEFAULT)));
+      next.burst = { mode: 'endgame', seconds };
+    } else if (mode === 'skip') {
+      next.burst = { mode: 'skip' };
+    } else {
+      delete next.burst;
+    }
+    emitNumericChange(next);
+  };
+  burstSelect.addEventListener('change', () => {
+    everyWrap.hidden = burstSelect.value !== 'priority';
+    lastWrap.hidden = burstSelect.value !== 'endgame';
+    applyBurst();
+  });
+  everyInput.addEventListener('input', applyBurst);
+  lastInput.addEventListener('input', applyBurst);
+
+  const burstNote = document.createElement('p');
+  burstNote.className = 'field-note';
+  burstNote.textContent =
+    '같은 버스트 단계 후보가 여럿일 때 누가 먼저 쓰는지를 정합니다(쿨타임 한도 내).'
+    + ' «n의 배수»는 그 사이클마다 우선 사용하고(n=1이면 매 사이클),'
+    + ' «막바지 최우선»은 전투가 그만큼 남았을 때부터 누구보다 먼저 씁니다 — 그 전에는 평소 순서입니다.'
+    + ' «안 씀»은 이 캐릭터가 버스트를 아예 쓰지 않습니다 — 같은 단계 동료가 전부 쿨이어도 나가지 않으므로,'
+    + ' 그 단계를 맡을 동료가 없으면 버스트 사이클 자체가 멈춥니다.';
+  burstEditor.append(burstHeading, burstRow, foldedNote('버스트 운용 설명', burstNote, 'burst'));
+  // `body`가 아니라 아래 «컨트롤 · 버스트» 접이판에 넣는다 — 버스트 운용도 결국
+  // 조작 방식이라 컨트롤과 한자리에 있는 편이 찾기 쉽다.
+
+  const equipEditor = document.createElement('section');
+  equipEditor.className = 'equip-editor';
+  const equipHeading = document.createElement('h4');
+  equipHeading.textContent = '장비 레벨';
+  const equipGrid = document.createElement('div');
+  equipGrid.className = 'equip-grid';
+  for (const part of EQUIP_PARTS) {
+    const partLabel = document.createElement('label');
+    const partText = document.createElement('span');
+    partText.textContent = EQUIP_PART_LABELS[part];
+    const partSelect = document.createElement('select');
+    partSelect.dataset.equipLevel = part;
+    // 장비는 세 갈래다 — 미장착 / 일반 T1~T9(강화 없음) / 오버로드 강화 0~5.
+    // 고를 수 있는 건 미장착과 오버로드 0~5강뿐이고, 일반 등급은 옛 설정·계정
+    // 가져오기로 들어온 값일 때만 목록에 남는다.
+    // 미장착을 «강화 0»으로 적으면 안 낀 부위가 플랫 스탯을 얻어 딜이 부푼다.
+    // 스킬 레벨과 같은 방향(낮은 값이 위)으로 둔다 — 한 패널 안에서 정렬이
+    // 엇갈리면 고를 때마다 방향을 다시 읽어야 한다.
+    const addOption = (value: string, label: string) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      partSelect.append(option);
+    };
+    // 실전에서 쓰는 것만 남긴다 — 일반 T1~T9는 골라 봐야 쓸 일이 없어 아예 뺐다.
+    // 강화 0단계는 「T9 기업」이 아니라 인게임 표기대로 「오버로드 0강」으로 적는다:
+    // 계산도 그쪽(오버로드 강화 0)으로 하고 있었으므로 이름이 계산을 따라간 것이다.
+    addOption('없음', '미장착');
+    addOption('0', '오버로드 0강');
+    for (let lv = 1; lv <= 5; lv += 1) addOption(String(lv), `오버로드 ${lv}강`);
+    const currentEquip = String(current.equipLevels?.[part] ?? 5);
+    // 옛 설정이나 계정 가져오기가 일반 T1~T9를 가리키면 그 값도 목록에 남겨 둔다 —
+    // 조용히 바뀌면 안 된다. 계산은 그대로 일반 장비 표로 한다.
+    if (![...partSelect.options].some((option) => option.value === currentEquip)) {
+      addOption(currentEquip, `${currentEquip} (옛 설정)`);
+    }
+    partSelect.value = currentEquip;
+    partSelect.addEventListener('change', () => {
+      const next = cloneOverrides(current);
+      const levels = { ...(next.equipLevels ?? {}) };
+      for (const p of EQUIP_PARTS) levels[p] ??= current.equipLevels?.[p] ?? 5;
+      const picked = partSelect.value;
+      levels[part] = /^\d+$/.test(picked) ? Number(picked) : (picked as EquipSetting);
+      next.equipLevels = levels;
+      emitNumericChange(next);
+    });
+    partLabel.append(partText, partSelect);
+    equipGrid.append(partLabel);
+  }
+  const equipNote = document.createElement('p');
+  equipNote.className = 'field-note';
+  equipNote.textContent = '부위별 장비 · 미장착 / 오버로드 0~5강. '
+    + '오버로드 «옵션»(우코·공증 등)과는 별개인 장비 기본 스탯입니다. '
+    + '오버로드 0강 이하(T9 기업 포함)는 전부 오버로드 0강으로 계산합니다.';
+  equipEditor.append(equipHeading, equipGrid, equipNote);
+  body.append(equipEditor);
+
+  // 소장품 / 애장품 — 같은 슬롯이라 한 목록에서 고른다. 애장품이 있는 캐릭터만
+  // 애장품 단계가 선택지에 나온다.
+  const collectionEditor = document.createElement('section');
+  collectionEditor.className = 'collection-editor';
+  const collectionHeading = document.createElement('h4');
+  collectionHeading.textContent = defaults.favoriteItem ? '소장품 · 애장품' : '소장품';
+  const collectionSelect = document.createElement('select');
+  collectionSelect.dataset.collection = '';
+  // 목록이 「없음 · R0~R15 · SR0~SR15」로 서른 줄이 넘는다. 실제로 고르는 것은 등급이
+  // 바뀌는 자리와 만렙뿐이라, 자주 쓰는 것만 세우고 나머지는 「직접 고르기」로 편다.
+  // 이미 그 사이의 값을 골라 둔 사람에게는 처음부터 전체 목록을 편다 — 안 그러면
+  // 자기가 고른 값이 목록에서 사라진다.
+  const COMMON_STAGES = ['없음', 'R0', 'R5', 'R15', 'SR0', 'SR5', 'SR10', 'SR15'];
+  const wasAll = previous<HTMLSelectElement>('[data-collection]')?.dataset.all === '1';
+  const showAllStages = wasAll
+    || !COMMON_STAGES.includes(current.collection!.stage)
+    || collectionAllRequested.has(name);
+  if (showAllStages) collectionSelect.dataset.all = '1';
+  const stageList = showAllStages
+    ? catalog.collectionStages
+    : catalog.collectionStages.filter((stage) => COMMON_STAGES.includes(stage));
+  const collectionOptions: Array<{ value: string; label: string }> = [
+    ...(defaults.favoriteItem
+      ? [3, 2, 1].map((stage) => ({
+        value: `favorite:${stage}`,
+        label: `애장품 ${'★'.repeat(stage)}${'☆'.repeat(3 - stage)}`,
+      }))
+      : []),
+    ...stageList.map((stage) => ({ value: `stage:${stage}`, label: stage })),
+    ...(showAllStages ? [] : [{ value: 'all', label: '직접 고르기…' }]),
+  ];
+  for (const option of collectionOptions) {
+    const node = document.createElement('option');
+    node.value = option.value;
+    node.textContent = option.label;
+    collectionSelect.append(node);
+  }
+  collectionSelect.value = current.collection!.favorite > 0
+    ? `favorite:${current.collection!.favorite}`
+    : `stage:${current.collection!.stage}`;
+  collectionSelect.addEventListener('change', () => {
+    if (collectionSelect.value === 'all') {
+      // 전체 목록으로 편다. 값은 그대로 두고 다시 그리기만 한다.
+      collectionAllRequested.add(name);
+      commit(cloneOverrides(current));
+      return;
+    }
+    const [kind, raw] = collectionSelect.value.split(':');
+    const next = cloneOverrides(current);
+    next.collection = kind === 'favorite'
+      ? { stage: 'SR15', favorite: Number(raw) }
+      : { stage: raw!, favorite: 0 };
+    commit(next);
+  });
+  const collectionNote = document.createElement('p');
+  collectionNote.className = 'field-note';
+  collectionNote.textContent = (defaults.favoriteItem
+    ? `${defaults.favoriteItem.name} 보유 시 애장품을, 아니면 실제 낀 소장품 단계를 고르세요. 애장품은 소장품 슬롯을 씁니다.`
+    : '실제로 장착한 소장품 등급·레벨입니다. 안 꼈으면 «없음»을 고르세요.')
+    + (showAllStages ? '' : ' 사이 단계는 «직접 고르기»로 폅니다.');
+  collectionEditor.append(collectionHeading, collectionSelect, collectionNote);
+  body.append(collectionEditor);
+
+  // ── 오버로드 옵션 ─────────────────────────────────────────────────────
+  // 인게임과 같은 단위로 고른다 — **부위 4개 × 3줄**, 줄마다 옵션과 레벨.
+  // 엔진이 받는 값은 예전 그대로 «옵션별 합계»라, 계산·저장·공유 코드는 그대로다.
+  const steps = catalog.overloadSteps;
+  if (steps) {
+    const lines = overloadLinesOf(current.overloadLines);
+    // 「붙이기」 단추들은 만들어진 뒤에 켜고 꺼야 한다 — 복사하는 순간 전부 살아난다.
+    const partMoveButtons: HTMLButtonElement[] = [];
+    const paintPartMoves = () => {
+      for (const button of partMoveButtons) button.disabled = copiedPart === null;
+    };
+    const editor = document.createElement('section');
+    editor.className = 'overload-lines';
+    const heading = document.createElement('div');
+    heading.className = 'ol-head';
+    const headingLabel = document.createElement('h4');
+    headingLabel.textContent = '오버로드 옵션';
+    heading.append(headingLabel);
+    const guide=document.createElement('button');guide.type='button';guide.className='ol-roll ol-guide';guide.textContent='옵작 가이드';guide.dataset.overloadGuide='';guide.onclick=async()=>{const {openOverloadGuide}=await import('./overload-guide');openOverloadGuide(name,catalog,cloneOverrides(current));};heading.append(guide);
+    // 오버로드작 시뮬레이션 — 이 카드의 실제 줄을 인게임 규칙대로 굴린다(overload-sim.ts).
+    const sim = overloadSims.get(name) ?? null;
+    const simButton = document.createElement('button');
+    simButton.type = 'button';
+    simButton.className = sim ? 'ol-roll ol-guide ol-sim is-on' : 'ol-roll ol-guide ol-sim';
+    simButton.dataset.overloadSim = '';
+    simButton.textContent = '시뮬레이션';
+    simButton.title = '옵션 변경을 인게임 규칙대로 굴려 봅니다 — 줄을 모듈이나 커스텀락키로 잠그고 효과·수치를 바꾸며 드는 재화를 셉니다';
+    simButton.setAttribute('aria-pressed', String(Boolean(sim)));
+    simButton.addEventListener('click', () => {
+      if (overloadSims.has(name)) overloadSims.delete(name);
+      else {
+        overloadSims.set(name, {
+          locks: { 머리: emptyLocks(), 몸통: emptyLocks(), 팔: emptyLocks(), 다리: emptyLocks() },
+          modules: 0, keys: 0,
+          origin: structuredClone(overloadLinesOf(current.overloadLines)),
+        });
+      }
+      commit(cloneOverrides(current));
+    });
+    heading.append(simButton);
+    if (overloadOptimizer) {
+      const best = document.createElement('button');
+      best.type = 'button';
+      best.className = 'ol-roll ol-guide ol-best';
+      best.dataset.overloadBest = '';
+      best.textContent = '최적옵작';
+      best.title = '이 덱에서 총딜이 가장 높게 나오는 오버로드 12줄 조합을 계산합니다. 누르면 방식과 계산 횟수를 먼저 보여 줍니다';
+      best.addEventListener('click', () => overloadOptimizer?.(name, cloneOverrides(current)));
+      heading.append(best);
+    }
+    // 안 키운 서포터를 재 볼 때 열두 줄을 손으로 넣는 것이 가장 지겨운 일이다.
+    // 정확한 스펙이 필요한 자리가 아니라 «대충 이런 장비» 하나가 필요한 자리다.
+    const roll = document.createElement('button');
+    roll.type = 'button';
+    roll.className = 'ol-roll';
+    roll.dataset.overloadRoll = '';
+    roll.textContent = '랜덤 채우기';
+    roll.title = '12줄을 굴려 채웁니다. 레벨은 1~5가 각 12%, 6~10이 각 7%, 11~15가 각 1%입니다';
+    roll.addEventListener('click', () => {
+      const pool = Object.keys(catalog.overloadFields).filter((key) => steps[key]);
+      const rolled = rollLines(pool, EQUIP_PARTS.length * OVERLOAD_LINES_PER_PART);
+      if (rolled.length === 0) return;
+      let at = 0;
+      for (const part of EQUIP_PARTS) {
+        lines[part] = lines[part].map(() => ({ ...rolled[at++]! }));
+      }
+      commitLines();
+    });
+    heading.append(roll);
+    editor.append(heading);
+    if (sim) {
+      editor.classList.add('is-sim');
+      const bar = document.createElement('div');
+      bar.className = 'ol-sim-bar';
+      bar.dataset.overloadSimBar = '';
+      const spent = document.createElement('span');
+      spent.className = 'ol-sim-spent';
+      spent.dataset.overloadSimSpent = '';
+      spent.textContent = t('시뮬레이션 중 · 모듈 {m} · 커스텀락키 {k}', { m: sim.modules, k: sim.keys });
+      prependItemIcon(spent, MODULE_ITEM);
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'ol-sim-reset';
+      reset.dataset.overloadSimReset = '';
+      reset.textContent = '처음으로';
+      reset.title = '시뮬레이션을 켤 때의 줄로 되돌리고 소모·잠금을 지웁니다';
+      reset.addEventListener('click', () => {
+        for (const part of EQUIP_PARTS) {
+          lines[part] = (sim.origin[part] ?? []).map((line) => ({ ...line }));
+          sim.locks[part] = emptyLocks();
+        }
+        sim.modules = 0;
+        sim.keys = 0;
+        commitLines();
+      });
+      const end = document.createElement('button');
+      end.type = 'button';
+      end.className = 'ol-sim-reset';
+      end.dataset.overloadSimEnd = '';
+      end.textContent = '끝내기';
+      end.title = '지금 줄은 그대로 두고 시뮬레이션만 끕니다';
+      end.addEventListener('click', () => { overloadSims.delete(name); commit(cloneOverrides(current)); });
+      bar.append(spent, reset, end);
+      editor.append(bar);
+      const note = document.createElement('p');
+      note.className = 'field-note ol-sim-note';
+      note.textContent = '줄 왼쪽 자물쇠로 모듈(파랑) 또는 커스텀락키(빨강) 잠금 · 변경 1회 = 모듈 1 + 모듈 잠금 줄 수, 락키는 잠긴 줄 수로 20·30·50 · 락키 잠금은 풀리지 않고 굴릴 때마다 또 듭니다';
+      editor.append(note);
+    }
+
+    /** 줄 하나를 바꾸면 합계를 다시 세어 함께 저장한다. */
+    const commitLines = () => {
+      const next = cloneOverrides(current);
+      next.overloadLines = Object.fromEntries(
+        EQUIP_PARTS.map((part) => [part, lines[part].map((line) => ({ ...line }))]),
+      ) as OverloadLines;
+      // 합계는 줄에서 나온다. 고르지 않은 옵션은 0으로 남겨 둔다 — 키를 빼면
+      // 「이 옵션은 안 쓴다」와 「모르겠다」가 구분되지 않는다.
+      const totals = overloadTotals(lines, steps);
+      next.overload = Object.fromEntries(
+        Object.keys(catalog.overloadFields).map((key) => [key, totals[key] ?? 0]),
+      );
+      commit(next);
+    };
+
+    for (const part of EQUIP_PARTS) {
+      const card = document.createElement('div');
+      card.className = 'ol-part';
+      card.dataset.overloadPart = part;
+      const head = document.createElement('div');
+      head.className = 'ol-part-head';
+      head.append(textSpan(EQUIP_PART_LABELS[part], 'ol-part-name'));
+      const sum = textSpan('', 'ol-part-sum');
+      head.append(sum);
+      // 부위 하나를 통째로 옮긴다. 네 부위에 같은 세 줄을 넣어 보는 일이 잦은데
+      // 지금은 열두 번을 고른다 — 「머리에서 베껴 다리에 붙이기」가 한 번이면 끝난다.
+      const partCopy = document.createElement('button');
+      partCopy.type = 'button';
+      partCopy.className = 'ol-part-move';
+      partCopy.dataset.overloadPartCopy = part;
+      partCopy.textContent = '복사';
+      partCopy.title = `${EQUIP_PART_LABELS[part]}의 세 줄을 기억해 둡니다`;
+      partCopy.addEventListener('click', () => {
+        copiedPart = lines[part].map((line) => ({ ...line }));
+        paintPartMoves();
+      });
+      const partPaste = document.createElement('button');
+      partPaste.type = 'button';
+      partPaste.className = 'ol-part-move';
+      partPaste.dataset.overloadPartPaste = part;
+      partPaste.textContent = '붙이기';
+      partPaste.disabled = copiedPart === null;
+      partPaste.title = '기억해 둔 세 줄을 이 부위에 그대로 넣습니다';
+      partPaste.addEventListener('click', () => {
+        if (!copiedPart) return;
+        lines[part] = copiedPart.map((line) => ({ ...line }));
+        commitLines();
+      });
+      partMoveButtons.push(partPaste);
+      head.append(partCopy, partPaste);
+      card.append(head);
+
+      let partTotal = 0;
+      lines[part].forEach((line, index) => {
+        const row = document.createElement('div');
+        row.className = 'ol-line';
+        if (sim) {
+          const locks = sim.locks[part];
+          const lock = document.createElement('button');
+          lock.type = 'button';
+          const kind = locks[index];
+          lock.className = kind === 'module' ? 'ol-lock is-module' : kind === 'key' ? 'ol-lock is-key' : 'ol-lock';
+          lock.dataset.overloadLock = `${part}:${index}`;
+          lock.textContent = kind === 'module' ? '모듈' : kind === 'key' ? '락키' : '🔓';
+          lock.title = kind ? '잠금을 바꾸거나 풉니다' : '이 줄을 모듈 또는 커스텀락키로 잠급니다';
+          lock.disabled = !canLock(locks, index, line);
+          lock.setAttribute('aria-haspopup', 'dialog');
+          // 잠금은 드롭다운이 아니라 **창**으로 고른다(유저 결정 2026-09-22) — 카드 안에서 펼치면
+          // 화면·설정 창 바닥에서 잘려 고를 수 없었다. 창은 body에 띄우고 닫으면 지운다.
+          const choose = (next: LockKind | null) => {
+            locks[index] = next;
+            commit(cloneOverrides(current));
+          };
+          lock.addEventListener('click', () => {
+            document.querySelector('[data-overload-lock-modal]')?.remove();
+            const modal = document.createElement('div');
+            modal.className = 'custom-modal ol-lock-modal';
+            modal.dataset.overloadLockModal = `${part}:${index}`;
+            const card = document.createElement('div');
+            card.className = 'custom-card ol-lock-card';
+            card.setAttribute('role', 'dialog');
+            card.setAttribute('aria-modal', 'true');
+            const head = document.createElement('div');
+            head.className = 'custom-head';
+            const title = document.createElement('h2');
+            title.textContent = `${EQUIP_PART_LABELS[part]} ${index + 1}번째 줄 잠금`;
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'custom-close';
+            close.setAttribute('aria-label', '닫기');
+            close.textContent = '✕';
+            head.append(title, close);
+            const what = document.createElement('p');
+            what.className = 'ol-lock-line';
+            const optionLabel = catalog.overloadFields[line.option]?.label ?? line.option;
+            what.textContent = `${optionLabel} Lv${line.level}` + (kind ? ` · 지금 ${kind === 'module' ? '모듈' : '커스텀락키'}로 잠김` : '');
+            const help = document.createElement('p');
+            help.className = 'field-note';
+            help.textContent = '모듈로 잠그면 변경마다 모듈이 1개 더 들고, 커스텀락키로 잠그면 잠긴 줄 수에 따라 락키 20·30·50이 듭니다. 락키 잠금은 풀리지 않고 굴릴 때마다 또 듭니다. 부위당 두 줄까지 잠글 수 있습니다.';
+            const choices = document.createElement('div');
+            choices.className = 'ol-lock-choices';
+            const dismiss = () => { modal.remove(); document.removeEventListener('keydown', onKey); };
+            const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') dismiss(); };
+            const option = (next: LockKind | null, label: string, className: string) => {
+              const item = document.createElement('button');
+              item.type = 'button';
+              item.className = className ? `ol-lock-choice ${className}` : 'ol-lock-choice';
+              item.dataset.overloadLockAs = next ?? 'none';
+              item.textContent = label;
+              item.addEventListener('click', () => { dismiss(); choose(next); });
+              choices.append(item);
+            };
+            option('module', '모듈로 잠금', 'is-module');
+            option('key', '커스텀락키로 잠금', 'is-key');
+            if (kind) option(null, '잠금 해제', '');
+            card.append(head, what, help, choices);
+            modal.append(card);
+            close.addEventListener('click', dismiss);
+            modal.addEventListener('click', (event) => { if (event.target === modal) dismiss(); });
+            document.addEventListener('keydown', onKey);
+            document.body.append(modal);
+            choices.querySelector<HTMLButtonElement>('button')?.focus();
+          });
+          row.append(lock);
+        }
+
+        const optionPick = document.createElement('select');
+        optionPick.dataset.overloadOption = `${part}:${index}`;
+        optionPick.setAttribute('aria-label', `${EQUIP_PART_LABELS[part]} ${index + 1}번째 옵션`);
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '— 비어 있음';
+        optionPick.append(none);
+        for (const [key, meta] of Object.entries(catalog.overloadFields)) {
+          if (!steps[key]) continue;
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = meta.label;
+          optionPick.append(option);
+        }
+        optionPick.value = line.option;
+        optionPick.addEventListener('change', () => {
+          line.option = optionPick.value;
+          commitLines();
+        });
+
+        const levelPick = document.createElement('select');
+        levelPick.className = 'ol-level';
+        levelPick.dataset.overloadLevel = `${part}:${index}`;
+        levelPick.setAttribute('aria-label', `${EQUIP_PART_LABELS[part]} ${index + 1}번째 레벨`);
+        const table = steps[line.option] ?? [];
+        for (let level = 1; level <= (table.length || 15); level += 1) {
+          const option = document.createElement('option');
+          option.value = String(level);
+          option.textContent = `Lv${level}`;
+          levelPick.append(option);
+        }
+        levelPick.value = String(line.level);
+        levelPick.disabled = !line.option;
+        levelPick.addEventListener('change', () => {
+          line.level = Number(levelPick.value) || 1;
+          commitLines();
+        });
+
+        const value = line.option ? (table[line.level - 1] ?? 0) : 0;
+        partTotal += value;
+        const shown = textSpan(line.option ? `+${numberText(value)}` : '—',
+          line.option ? 'ol-value' : 'ol-value is-empty');
+
+        row.append(optionPick, levelPick, shown);
+        card.append(row);
+      });
+      sum.textContent = partTotal > 0 ? `합 ${numberText(partTotal)}` : '빈 부위';
+      if (sim) {
+        // 변경 단추 — 누르는 순간 재화가 든다. 잠금 비용도 여기서(잠글 때가 아니라).
+        const locks = sim.locks[part];
+        const cost = changeCost(locks);
+        const actions = document.createElement('div');
+        actions.className = 'ol-sim-actions';
+        const costText = cost.keys > 0
+          ? t('모듈 {m} · 락키 {k}', { m: cost.modules, k: cost.keys })
+          : t('모듈 {m}', { m: cost.modules });
+        const spend = (next: OverloadLine[]) => {
+          sim.modules += cost.modules;
+          sim.keys += cost.keys;
+          lines[part] = next;
+          commitLines();
+        };
+        const effect = document.createElement('button');
+        effect.type = 'button';
+        effect.className = 'ol-sim-change';
+        effect.dataset.overloadSimEffect = part;
+        effect.textContent = `${t('효과 변경')} · ${costText}`;
+        effect.title = '잠기지 않은 줄의 효과와 수치를 새로 굴립니다';
+        effect.addEventListener('click', () => {
+          const pool = Object.keys(catalog.overloadFields).filter((key) => steps[key]);
+          spend(rollEffectChange(lines[part], locks, pool, overloadSimRng()));
+        });
+        const value = document.createElement('button');
+        value.type = 'button';
+        value.className = 'ol-sim-change';
+        value.dataset.overloadSimValue = part;
+        value.textContent = `${t('수치 변경')} · ${costText}`;
+        value.title = '효과는 두고 잠기지 않은 줄의 수치만 새로 굴립니다';
+        value.disabled = !lines[part].some((line, index) => line.option && !locks[index]);
+        value.addEventListener('click', () => spend(rollValueChange(lines[part], locks, overloadSimRng())));
+        actions.append(effect, value);
+        card.append(actions);
+      }
+      editor.append(card);
+    }
+    body.append(editor);
+  }
+
+  const overloadGrid = document.createElement('div');
+  overloadGrid.className = 'overload-grid';
+  for (const [key, meta] of Object.entries(catalog.overloadFields)) {
+    const label = document.createElement('label');
+    const text = document.createElement('span');
+    text.textContent = meta.label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.min = String(meta.min);
+    input.max = String(meta.max);
+    input.value = String(current.overload[key] ?? defaults.overload[key] ?? 0);
+    input.dataset.overloadKey = key;
+    input.addEventListener('input', () => {
+      const next = cloneOverrides(current);
+      next.overload![key] = Number(input.value);
+      emitNumericChange(next);
+    });
+    label.append(text, makeInputUnit(input, meta.unit));
+    overloadGrid.append(label);
+  }
+  const chargeOptionNote = document.createElement('p');
+  chargeOptionNote.className = 'field-note';
+  chargeOptionNote.textContent = '차지형 무기가 아니면 차지 옵션은 효과가 없습니다.';
+
+  if (steps) {
+    // 직접 입력은 남긴다 — 남의 스펙을 그대로 받아 적거나, 줄로 만들 수 없는 값을
+    // 넣을 때 필요하다. 다만 **전투력은 나오지 않는다**: 인게임 전투력은 옵션 «단계»를
+    // 세는데, 손으로 적은 합계는 단계 조합으로 떨어지지 않을 수 있다.
+    const manual = document.createElement('details');
+    manual.className = 'overload-manual';
+    manual.dataset.overloadManual = '';
+    manual.open = previous<HTMLDetailsElement>('[data-overload-manual]')?.open ?? false;
+    const head = document.createElement('summary');
+    head.textContent = '합계를 직접 입력';
+    const warn = document.createElement('p');
+    warn.className = 'field-note warning';
+    warn.textContent = '직접 적은 값은 위 3줄과 어긋날 수 있고, 그때는 전투력이 나오지 않습니다 '
+      + '— 인게임 전투력은 옵션 단계를 세는데 손으로 적은 합계는 단계로 떨어지지 않을 수 있습니다.';
+    manual.append(head, warn, overloadGrid, chargeOptionNote);
+    body.append(manual);
+  } else {
+    body.append(overloadGrid, chargeOptionNote);
+  }
+
+  // 큐브는 수치 설정 창 **밖**, 카드에 둔다 — 「수치 설정」과 「컨트롤」 사이. 큐브는
+  // 육성이 아니라 «운용»이라 창을 열지 않고 갈아 끼우게 하고, 계산기 레이드처럼 수치
+  // 설정이 잠기는 자리에서도 이것만은 살아 있어야 한다.
+  const cubeField = document.createElement('div');
+  cubeField.className = 'cube-field';
+  cubeField.dataset.cubeField = '';
+  const cubeLabel = document.createElement('span');
+  cubeLabel.className = 'cube-field-label';
+  cubeLabel.textContent = '큐브';
+  const cubeControls = document.createElement('div');
+  cubeControls.className = 'cube-controls';
+  const cubeSelect = document.createElement('select');
+  cubeSelect.dataset.cubeName = '';
+  // 선택지는 카탈로그(=cube.json)에서 그대로 온다. 새 큐브가 추가돼도 코드는 그대로다.
+  // 맨 앞의 «없음»만 데이터가 아니라 화면이 만든다 — 큐브 효과가 오히려 손해인 조합
+  // (미란다 버프 등)을 재려면 안 낀 상태도 고를 수 있어야 한다.
+  const noneOption = document.createElement('option');
+  noneOption.value = NO_CUBE;
+  noneOption.textContent = '없음 (큐브 미착용)';
+  cubeSelect.append(noneOption);
+  for (const cubeName of Object.keys(catalog.cubes)) {
+    const option = document.createElement('option');
+    option.value = cubeName;
+    // 「렐릭 베어 큐브 (재장)」 — 정식 이름만으로는 무슨 큐브인지 바로 안 읽힌다.
+    option.textContent = cubeDisplayName(cubeName, catalog.cubes[cubeName]?.stat);
+    cubeSelect.append(option);
+  }
+  // 저장된 편성이 지금 카탈로그에 없는 큐브를 가리킬 수 있다(데이터 갱신·구버전 상태).
+  // 그때는 목록의 첫 큐브로 되돌려 UI가 통째로 죽지 않게 한다.
+  const cubeNames = Object.keys(catalog.cubes);
+  const noCube = current.cube.name === NO_CUBE;
+  const cubeName = noCube ? NO_CUBE
+    : (catalog.cubes[current.cube.name] ? current.cube.name : cubeNames[0]!);
+  const cubeMeta = catalog.cubes[cubeName] ?? catalog.cubes[cubeNames[0]!]!;
+  cubeSelect.value = cubeName;
+  const levelSelect = document.createElement('select');
+  levelSelect.dataset.cubeLevel = '';
+  const availableLevels = Object.keys(cubeMeta.levels)
+    .map(Number).sort((left, right) => left - right);
+  for (const level of availableLevels) {
+    const option = document.createElement('option');
+    option.value = String(level);
+    option.textContent = `Lv${level}`;
+    levelSelect.append(option);
+  }
+  levelSelect.value = String(noCube ? 15 : current.cube.level);
+  levelSelect.disabled = noCube;
+  cubeSelect.addEventListener('change', () => {
+    const next = cloneOverrides(current);
+    if (cubeSelect.value === NO_CUBE) {
+      // 안 낀 상태에는 레벨이 없다 — 0으로 못 박아 엔진과 같은 뜻으로 보낸다.
+      next.cube = { name: NO_CUBE, level: 0 };
+      commit(next);
+      return;
+    }
+    next.cube = { name: cubeSelect.value as CubeName, level: current.cube!.level || 15 };
+    if (!catalog.cubes[next.cube.name]?.levels[String(next.cube.level)]) {
+      next.cube.level = 15;
+    }
+    commit(next);
+  });
+  levelSelect.addEventListener('change', () => {
+    const next = cloneOverrides(current);
+    next.cube = { name: current.cube!.name, level: Number(levelSelect.value) };
+    commit(next);
+  });
+  cubeControls.append(cubeSelect, levelSelect);
+  const level = noCube ? undefined : cubeMeta.levels[String(current.cube.level)];
+  // 스탯 요약은 툴팁으로 낸다 — 카드 폭에서 한 줄을 더 쓰면 다섯 장이 서로를 밀어낸다.
+  let cubeSummary = '';
+  if (noCube) {
+    cubeSummary = '큐브를 끼지 않습니다 — 큐브의 스탯도, 우월 코드 효과도 붙지 않습니다.';
+  } else if (level) {
+    const effect = cubeMeta.template.replace('{0}', String(level.effect));
+    cubeSummary = `공격 ${level.atk.toLocaleString('en-US')} · 방어 ${level.def.toLocaleString('en-US')} · `
+      + `체력 ${level.hp.toLocaleString('en-US')} · ${effect} · 우월 코드 ${level.commonElement}%`;
+  }
+  cubeField.title = cubeSummary;
+  cubeSelect.title = cubeSummary;
+  cubeSelect.setAttribute('aria-label', `${name} 큐브`);
+  levelSelect.setAttribute('aria-label', `${name} 큐브 레벨`);
+  cubeField.append(cubeLabel, cubeControls);
+  // 고유 스킬이 계산에 안 들어가는 큐브는 그 사실을 숨기지 않는다. 스탯은 붙으므로
+  // 선택 자체는 의미가 있고, 표시된 효과 수치만 결과에 반영되지 않는다.
+  if (!noCube && cubeMeta.unsupported) {
+    const note = document.createElement('p');
+    note.className = 'cube-unsupported-note';
+    note.dataset.cubeUnsupported = '';
+    note.textContent = `이 큐브의 고유 효과는 아직 계산에 반영되지 않습니다 — `
+      + `공격력·방어력·체력과 우월 코드 효과만 적용됩니다. (${cubeMeta.unsupported})`;
+    cubeField.append(note);
+  }
+
+  const controlEditor = document.createElement('section');
+  controlEditor.className = 'control-editor';
+  const controlMode = document.createElement('div');
+  controlMode.className = 'control-mode';
+  const isAutomatic = current.control === undefined;
+  for (const [mode, labelText] of [
+    ['auto', '추천 자동 적용'],
+    ['manual', '직접 설정'],
+  ] as const) {
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = `control-mode-${name}`;
+    radio.dataset.controlMode = mode;
+    radio.checked = mode === 'auto' ? isAutomatic : !isAutomatic;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      const next = cloneOverrides(current);
+      if (mode === 'auto') delete next.control;
+      else next.control = {};
+      commit(next);
+    });
+    label.append(radio, document.createTextNode(labelText));
+    controlMode.append(label);
+  }
+  const recommendation = document.createElement('p');
+  recommendation.className = 'field-note';
+  recommendation.textContent = recommendedControlText(defaults, squad);
+
+  // 조합으로 붙는 컨트롤은 아무도 켠 적이 없는데 걸린다 — 왜 걸리는지 바로 아래 적는다.
+  const ruleNotes = document.createElement('div');
+  ruleNotes.className = 'control-rules';
+  for (const note of controlRuleNotes(defaults, squad)) {
+    const row = document.createElement('p');
+    row.className = note.active ? 'control-rule is-on' : 'control-rule';
+    row.dataset.controlRule = note.active ? 'on' : 'off';
+    const head = document.createElement('b');
+    head.textContent = note.headline;
+    row.append(head);
+    if (note.help) {
+      const why = document.createElement('span');
+      why.textContent = note.help;
+      row.append(why);
+    }
+    ruleNotes.append(row);
+  }
+
+  const controlGrid = document.createElement('div');
+  controlGrid.className = 'control-grid';
+  const displayedControl = isAutomatic ? defaults.recommendedControl : current.control!;
+
+  const updateControl = (key: keyof CharacterControl, entry: CharacterControl[typeof key] | undefined) => {
+    const next = cloneOverrides(current);
+    const nextControl: CharacterControl = { ...(next.control ?? {}) };
+    if (entry === undefined) delete nextControl[key];
+    else Object.assign(nextControl, { [key]: entry });
+    // 톡톡이와 풀차징컨은 한 손으로 동시에 할 수 없다 — 톡톡이를 켜면 풀차징컨을 끈다.
+    if (key === 'tap_fire' && entry !== undefined) delete nextControl.full_charge;
+    next.control = nextControl;
+    commit(next);
+  };
+  const addControlToggle = (
+    key: keyof CharacterControl,
+    labelText: string,
+    enabledValue: CharacterControl[typeof key],
+  ): HTMLLabelElement => {
+    const label = document.createElement('label');
+    label.className = 'inline-check control-toggle';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.control = key;
+    checkbox.checked = displayedControl[key] !== undefined;
+    checkbox.disabled = isAutomatic;
+    checkbox.addEventListener('change', () => {
+      updateControl(key, checkbox.checked ? enabledValue : undefined);
+    });
+    label.append(checkbox, document.createTextNode(labelText));
+    controlGrid.append(label);
+    return label;
+  };
+
+  if (name === '길티 : 마이티 바니' || name === '신 : 스위프트 바니') {
+    const modes = document.createElement('fieldset');
+    modes.className = 'bunny-mode-control';
+    const legend = document.createElement('legend');
+    legend.textContent = '특수 조작 · 바니 모드';
+    modes.append(legend);
+    for (const [mode, text] of [['engage', '인게이지 사용'], ['stance', '스탠스 사용']] as const) {
+      const label = document.createElement('label');
+      label.className = 'inline-check';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = `bunny-mode-${name}`;
+      radio.dataset.bunnyMode = mode;
+      radio.checked = (displayedControl.bunny_mode ?? 'engage') === mode;
+      radio.addEventListener('change', () => {
+        if (!radio.checked) return;
+        const next = cloneOverrides(current);
+        next.control = { ...displayedControl, bunny_mode: mode };
+        commit(next);
+      });
+      label.append(radio, document.createTextNode(text));
+      modes.append(label);
+    }
+    const help = document.createElement('p');
+    help.className = 'field-note';
+    help.textContent = '기본은 인게이지입니다. 인게이지는 풀 차지를 1초 더 유지해 전환하며, 선택한 모드를 유지하도록 조작합니다.';
+    modes.append(help);
+    controlGrid.append(modes);
+  }
+
+  if (defaults.weaponType === 'SR' || defaults.weaponType === 'RL') {
+    const tapLabel = addControlToggle('tap_fire', '톡톡이', { rate: TAP_FIRE_DEFAULT, release: 0.03 });
+    // 발사 속도는 사람마다 다르다. 커뮤니티는 10초당 발수(«N톡톡이»)로 부르므로
+    // 입력은 발/초로 받되 환산값을 같이 보여준다.
+    const tapRate = document.createElement('input');
+    tapRate.type = 'number';
+    tapRate.dataset.tapRate = '';
+    tapRate.step = '0.1';
+    tapRate.min = '0.1';
+    tapRate.max = '20';
+    tapRate.value = String(displayedControl.tap_fire?.rate ?? TAP_FIRE_DEFAULT);
+    tapRate.disabled = isAutomatic || displayedControl.tap_fire === undefined;
+    const tapHint = document.createElement('small');
+    tapHint.className = 'tap-rate-hint';
+    tapHint.dataset.tapHint = '';
+    const paintHint = (rate: number) => {
+      if (!Number.isFinite(rate) || rate <= 0) { tapHint.textContent = ''; return; }
+      // 10초에 N발이면 사이클은 10/(N-1)초다 (CONTROL.md §톡톡이).
+      tapHint.textContent = `≈ ${Math.round(rate * 10)}톡톡이`
+        + (rate > TAP_FIRE_HARD_LIMIT ? ' · 게임 하한(220ms)을 넘는 값입니다' : '');
+      tapHint.classList.toggle('is-warning', rate > TAP_FIRE_HARD_LIMIT);
+    };
+    paintHint(Number(tapRate.value));
+    tapRate.addEventListener('input', () => {
+      const rate = Number(tapRate.value);
+      paintHint(rate);
+      if (!Number.isFinite(rate) || rate <= 0) return;
+      const next = cloneOverrides(current);
+      next.control = { ...(next.control ?? {}), tap_fire: { ...(next.control?.tap_fire ?? {}), rate, release: 0.03 } };
+      emitNumericChange(next);
+    });
+    tapLabel.append(makeInputUnit(tapRate, '발/초'), tapHint);
+    // 언제 톡톡이할지 — 언제나, 또는 버충 구간만(풀버스트가 끝나면 재장전하고 다음
+    // 풀버스트까지 톡톡이, 풀버스트 동안은 풀차지). 실제로 그렇게 조작한다(피드백 2026-09-22).
+    const tapPolicy = document.createElement('select');
+    tapPolicy.dataset.controlPolicy = 'tap_fire';
+    for (const [policy, text] of [
+      ['always', '항상 톡톡이'],
+      ['burst_charge', '버충 구간만 (풀버스트 끝 → 재장전 → 톡톡이)'],
+    ] as const) {
+      const option = document.createElement('option');
+      option.value = policy;
+      option.textContent = text;
+      tapPolicy.append(option);
+    }
+    tapPolicy.value = displayedControl.tap_fire?.policy ?? 'always';
+    tapPolicy.disabled = isAutomatic || displayedControl.tap_fire === undefined;
+    tapPolicy.addEventListener('change', () => {
+      const base = current.control?.tap_fire ?? displayedControl.tap_fire ?? { rate: TAP_FIRE_DEFAULT, release: 0.03 };
+      const { policy: _drop, ...rest } = base;
+      updateControl('tap_fire', tapPolicy.value === 'burst_charge' ? { ...rest, policy: 'burst_charge' } : rest);
+    });
+    tapLabel.append(tapPolicy);
+    // 버충 구간만일 때: 재장전 뒤 첫 발을 풀차지로 쏘고 톡톡이한다(기본 켬). 톡톡이는 논차지라
+    // 「풀 차지 공격 시」 버프(프리카)가 풀버스트 끝과 함께 끊기는데, 실제 조작은 한 발 풀차지로
+    // 되살린 뒤 톡톡이한다(피드백 2026-09-22). 끄면 재장전하자마자 톡톡이다.
+    const tapFullAfter = document.createElement('label');
+    tapFullAfter.className = 'inline-check tap-full-after-reload';
+    tapFullAfter.title = '풀버스트가 끝나 재장전한 뒤 첫 발을 풀차지로 쏘고 톡톡이로 넘어갑니다. 「풀 차지 공격 시」 버프를 되살리는 실제 조작입니다. 끄면 재장전하자마자 톡톡이합니다';
+    const tapFullBox = document.createElement('input');
+    tapFullBox.type = 'checkbox';
+    tapFullBox.dataset.tapFullAfterReload = '';
+    tapFullBox.checked = displayedControl.tap_fire?.full_charge_after_reload !== false;
+    tapFullBox.disabled = isAutomatic || displayedControl.tap_fire?.policy !== 'burst_charge';
+    tapFullBox.addEventListener('change', () => {
+      const base = current.control?.tap_fire ?? displayedControl.tap_fire ?? { rate: TAP_FIRE_DEFAULT, release: 0.03 };
+      const { full_charge_after_reload: _drop, ...rest } = base;
+      updateControl('tap_fire', tapFullBox.checked ? rest : { ...rest, full_charge_after_reload: false });
+    });
+    tapFullAfter.append(tapFullBox, document.createTextNode('재장전 후 풀차지 1발'));
+    tapLabel.append(tapFullAfter);
+    // 풀차징컨 — 직접 잡고 풀차지로 쏘는 조작. 자동 사격은 쏜 뒤 0.38초쯤 멈췄다 다음 차지를 드는데,
+    // 사람이 바로 누르면 그 틈이 줄어든다. 그 틈(딜레이)을 사람마다 정한다. 톡톡이와는 함께 쓸 수 없고,
+    // 덱에서 한 명만 켠다(켜면 같은 덱의 다른 니케는 꺼진다).
+    const fullLabel = document.createElement('label');
+    fullLabel.className = 'inline-check control-toggle';
+    const fullBox = document.createElement('input');
+    fullBox.type = 'checkbox';
+    fullBox.dataset.control = 'full_charge';
+    fullBox.checked = displayedControl.full_charge !== undefined;
+    fullBox.disabled = isAutomatic;
+    const fullDelay = document.createElement('input');
+    fullDelay.type = 'number';
+    fullDelay.dataset.fullChargeDelay = '';
+    fullDelay.step = '0.01';
+    fullDelay.min = '0';
+    fullDelay.max = '3';
+    fullDelay.value = String(displayedControl.full_charge?.delay ?? FULL_CHARGE_DELAY_DEFAULT);
+    fullDelay.disabled = isAutomatic || displayedControl.full_charge === undefined;
+    fullBox.addEventListener('change', () => {
+      const next = cloneOverrides(current);
+      const control: CharacterControl = { ...(next.control ?? {}) };
+      if (fullBox.checked) {
+        control.full_charge = { delay: Number(fullDelay.value) || FULL_CHARGE_DELAY_DEFAULT };
+        delete control.tap_fire;
+      } else {
+        delete control.full_charge;
+      }
+      next.control = control;
+      commit(next);
+    });
+    fullDelay.addEventListener('input', () => {
+      const delay = Number(fullDelay.value);
+      if (!Number.isFinite(delay) || delay < 0 || delay > 3) return;
+      const next = cloneOverrides(current);
+      next.control = { ...(next.control ?? {}), full_charge: { delay } };
+      emitNumericChange(next);
+    });
+    fullLabel.title = '직접 조작으로 풀차지 한 발을 쏘고 다음 차지를 누르기까지의 딜레이입니다. 자동 사격은 약 0.38초입니다. 덱에서 한 명만 켤 수 있습니다';
+    fullLabel.append(fullBox, document.createTextNode('풀차징컨'), makeInputUnit(fullDelay, '초'));
+    controlGrid.append(fullLabel);
+    if (name !== '길티 : 마이티 바니' && name !== '신 : 스위프트 바니') {
+    const holdLabel = addControlToggle('hold', '홀드 컨트롤', {
+      policy: 'own_full_burst', lead: 0.5,
+    });
+    const holdPolicy = document.createElement('select');
+    holdPolicy.dataset.controlPolicy = 'hold';
+    for (const [policy, text] of [
+      ['own_full_burst', '본인 풀버스트 홀드'],
+      ['charge_hold_after_fb', '풀버스트 후 홀드'],
+    ] as const) {
+      const option = document.createElement('option');
+      option.value = policy;
+      option.textContent = text;
+      holdPolicy.append(option);
+    }
+    holdPolicy.value = displayedControl.hold?.policy ?? 'own_full_burst';
+    holdPolicy.disabled = isAutomatic || displayedControl.hold === undefined;
+    holdPolicy.addEventListener('change', () => {
+      updateControl('hold', {
+        policy: holdPolicy.value as 'own_full_burst' | 'charge_hold_after_fb',
+        lead: holdPolicy.value === 'own_full_burst' ? 0.5 : 0.1,
+      });
+    });
+    holdLabel.append(holdPolicy);
+    }
+  }
+
+  const reloadLabel = addControlToggle('reload', '재장전 컨트롤', {
+    policy: 'before_fb_end', lead: 0.3,
+  });
+  const reloadPolicy = document.createElement('select');
+  reloadPolicy.dataset.controlPolicy = 'reload';
+  for (const [policy, text] of [
+    ['before_fb_end', '풀버스트 종료 전'],
+    ['into_fb', '풀버스트 진입 맞춤'],
+  ] as const) {
+    const option = document.createElement('option');
+    option.value = policy;
+    option.textContent = text;
+    reloadPolicy.append(option);
+  }
+  reloadPolicy.value = displayedControl.reload?.policy ?? 'before_fb_end';
+  reloadPolicy.disabled = isAutomatic || displayedControl.reload === undefined;
+  reloadPolicy.addEventListener('change', () => {
+    updateControl('reload', reloadPolicy.value === 'before_fb_end'
+      ? { policy: 'before_fb_end', lead: 0.3 }
+      : { policy: 'into_fb', margin: 0.1 });
+  });
+  reloadLabel.append(reloadPolicy);
+  addControlToggle('cover', '버스트 엄폐 컨트롤', { policy: 'own_full_burst' });
+
+  if (name === '신데렐라 : 크리스탈 웨이브') {
+    const modeLabel = document.createElement('label');
+    modeLabel.className = 'inline-check control-toggle weapon-mode-swap';
+    const modeCheckbox = document.createElement('input');
+    modeCheckbox.type = 'checkbox';
+    modeCheckbox.dataset.weaponModeSwap = '';
+    modeCheckbox.checked = current.weaponModeSwapAt !== undefined;
+    const modeDelay = document.createElement('input');
+    modeDelay.type = 'number';
+    modeDelay.dataset.weaponModeSwapAt = '';
+    modeDelay.min = '0';
+    modeDelay.max = '180';
+    modeDelay.step = '0.1';
+    modeDelay.value = String(current.weaponModeSwapAt ?? WEAPON_MODE_SWAP_DEFAULT);
+    modeDelay.disabled = current.weaponModeSwapAt === undefined;
+    modeCheckbox.addEventListener('change', () => {
+      const next = cloneOverrides(current);
+      if (modeCheckbox.checked) next.weaponModeSwapAt = WEAPON_MODE_SWAP_DEFAULT;
+      else delete next.weaponModeSwapAt;
+      commit(next);
+    });
+    modeDelay.addEventListener('input', () => {
+      const at = Number(modeDelay.value);
+      if (!Number.isFinite(at) || at < 0 || at > 180) return;
+      const next = cloneOverrides(current);
+      next.weaponModeSwapAt = at;
+      emitNumericChange(next);
+    });
+    modeLabel.append(
+      modeCheckbox,
+      document.createTextNode('저격 모드로 변경 · 전투 시작 '),
+      makeInputUnit(modeDelay, '초'),
+      document.createTextNode('후부터 전환 시도'),
+    );
+    controlGrid.append(modeLabel);
+  }
+
+  const controlWarning = document.createElement('p');
+  controlWarning.className = 'field-note warning';
+  controlWarning.textContent = '여러 캐릭터 동시 컨트롤은 실제 한 명 조작보다 유리한 상한일 수 있습니다.';
+  // 컨트롤은 창으로 띄우지 않고 **카드에서 그 자리에 펼친다**. 창을 열면 편성이
+  // 가려지는데, 컨트롤은 옆 사람 것을 보며 정하는 설정이라 그 대가가 크다.
+  // 대신 접힌 칩에 지금 상태를 적어 두어, 열지 않고도 읽히게 한다.
+  const controlChip = document.createElement('button');
+  controlChip.type = 'button';
+  controlChip.className = 'control-chip';
+  controlChip.dataset.controlOpen = '';
+  controlChip.setAttribute('aria-expanded', String(controlWasOpen));
+  const chipGear = document.createElement('span');
+  chipGear.className = 'control-chip-gear';
+  chipGear.setAttribute('aria-hidden', 'true');
+  chipGear.textContent = '⚙';
+  const chipText = document.createElement('span');
+  chipText.className = 'control-chip-text';
+  paintControlChip = () => {
+    chipText.textContent = controlChipText(current);
+    chipText.title = `컨트롤 · 버스트 — ${chipText.textContent}`;
+  };
+  paintControlChip();
+  const chipCaret = document.createElement('span');
+  chipCaret.className = 'control-chip-caret';
+  chipCaret.textContent = controlWasOpen ? '▴' : '▾';
+  controlChip.append(chipGear, chipText, chipCaret);
+
+  const controlPanel = document.createElement('div');
+  controlPanel.className = 'control-panel';
+  controlPanel.dataset.controlPanel = '';
+  controlPanel.hidden = !controlWasOpen;
+  controlPanel.append(controlMode, recommendation, ruleNotes, controlGrid,
+    foldedNote('동시 컨트롤 주의', controlWarning, 'control-warning'), burstEditor);
+  controlChip.addEventListener('click', () => {
+    const next = controlChip.getAttribute('aria-expanded') !== 'true';
+    controlChip.setAttribute('aria-expanded', String(next));
+    controlPanel.hidden = !next;
+    chipCaret.textContent = next ? '▴' : '▾';
+  });
+  controlEditor.append(controlChip, controlPanel);
+  // 컨트롤은 돌파·스킬·오버로드·큐브와 **형제**로 둔다. 그 안에 넣으면 컨트롤만
+  // 보려 해도 설정 뭉치를 먼저 펼쳐야 한다 — 두 뭉치는 만지는 이유가 다르다.
+
+  const advancedLabel = document.createElement('label');
+  advancedLabel.className = 'inline-check advanced-toggle';
+  const advancedToggle = document.createElement('input');
+  advancedToggle.type = 'checkbox';
+  advancedToggle.checked = advancedWasOpen;
+  advancedToggle.dataset.advancedToggle = '';
+  const advancedText = document.createElement('span');
+  advancedText.textContent = '고급 모드';
+  advancedLabel.append(advancedToggle, advancedText);
+  body.append(advancedLabel);
+
+  const advanced = document.createElement('div');
+  advanced.className = 'advanced-editor';
+  advanced.hidden = !advancedToggle.checked;
+  const picker = document.createElement('div');
+  picker.className = 'advanced-picker';
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.placeholder = '추가 수치 검색';
+  search.dataset.manualSearch = '';
+  // 하나 추가했다고 검색어까지 지우면 둘째 줄부터 매번 다시 쳐야 한다.
+  search.value = searchWas;
+  const manualSelect = document.createElement('select');
+  manualSelect.dataset.manualSelect = '';
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.dataset.addStat = '';
+  add.textContent = '수치 추가';
+  const renderManualOptions = () => {
+    const query = search.value.trim().toLocaleLowerCase('ko');
+    manualSelect.replaceChildren();
+    for (const [key, meta] of Object.entries(catalog.manualStats)) {
+      if (key in current.manualStats!) continue;
+      if (query && !meta.label.toLocaleLowerCase('ko').includes(query) && !key.includes(query)) continue;
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = meta.label;
+      manualSelect.append(option);
+    }
+    add.disabled = manualSelect.options.length === 0;
+  };
+  search.addEventListener('input', renderManualOptions);
+  add.addEventListener('click', () => {
+    const key = manualSelect.value;
+    if (!key || key in current.manualStats!) return;
+    const next = cloneOverrides(current);
+    next.manualStats![key] = 0;
+    commit(next);
+  });
+  renderManualOptions();
+  picker.append(search, manualSelect, add);
+  advanced.append(picker);
+
+  const rows = document.createElement('div');
+  rows.className = 'manual-rows';
+  for (const [key, manualValue] of Object.entries(current.manualStats)) {
+    const meta = catalog.manualStats[key];
+    if (!meta) continue;
+    const row = document.createElement('label');
+    row.className = 'manual-row';
+    row.dataset.manualRow = key;
+    const text = document.createElement('span');
+    text.textContent = meta.label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.min = String(meta.min);
+    input.max = String(meta.max);
+    input.value = String(manualValue);
+    input.dataset.manualStat = key;
+    input.addEventListener('input', () => {
+      const next = cloneOverrides(current);
+      next.manualStats![key] = Number(input.value);
+      emitNumericChange(next);
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.dataset.removeStat = key;
+    remove.textContent = '삭제';
+    remove.addEventListener('click', () => {
+      const next = cloneOverrides(current);
+      delete next.manualStats![key];
+      commit(next);
+    });
+    row.append(text, makeInputUnit(input, meta.unit), remove);
+    rows.append(row);
+  }
+  advanced.append(rows);
+  advancedToggle.addEventListener('change', () => {
+    advanced.hidden = !advancedToggle.checked;
+  });
+  body.append(advanced);
+  const bodyFold = panelOpener('돌파 · 스킬 · 오버로드', 'settings', '수치 설정');
+
+  // 「이만큼 더 키우면 얼마나 오르나」를 보려면 양 끝을 한 번씩 눌러 봐야 하는데,
+  // 지금은 돌파·스킬·장비·소장품·큐브를 하나씩 열 번 넘게 만져야 한다. 그 양 끝을
+  // 단추 둘로 둔다. **운용(컨트롤·버스트)은 건드리지 않는다** — 육성이 아니다.
+  {
+    const extremes = document.createElement('div');
+    extremes.className = 'growth-extremes';
+    const maxCubeLevel = (name: string): number => {
+      const levels = Object.keys(catalog.cubes[name]?.levels ?? {})
+        .map(Number).filter(Number.isFinite);
+      return levels.length > 0 ? Math.max(...levels) : 15;
+    };
+    /** 육성 칸만 양 끝으로. 운용 칸은 손대지 않는다. */
+    const extreme = (top: boolean): CharacterOverrides => {
+      const next = cloneOverrides(current);
+      next.growthStage = top ? defaults.maxGrowthStage : 0;
+      // 수치 미공개(프리뷰) 캐릭터는 Lv10 고정이라 스킬을 건드리지 않는다.
+      if (!defaults.skillLevelsLocked) {
+        next.skillLevels = top ? { 1: 10, 2: 10, 3: 10 } : { 1: 1, 2: 1, 3: 1 };
+      }
+      next.equipLevels = Object.fromEntries(
+        EQUIP_PARTS.map((part) => [part, top ? 5 : '없음']),
+      ) as CharacterOverrides['equipLevels'];
+      next.collection = top
+        ? { stage: 'SR15', favorite: defaults.favoriteItem ? 3 : 0 }
+        : { stage: '없음', favorite: 0 };
+      const cubeName = next.cube?.name ?? defaults.cube.name;
+      next.cube = top && cubeName !== NO_CUBE
+        ? { name: cubeName, level: maxCubeLevel(cubeName) }
+        : { name: NO_CUBE, level: 0 };
+      // 오버로드 «옵션»은 굴려서 얻는 것이라 양 끝이 없다 — 없애기만 한다.
+      if (!top) { delete next.overload; delete next.overloadLines; }
+      return next;
+    };
+    const endButton = (label: string, armedLabel: string, title: string, top: boolean) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'growth-extreme';
+      button.dataset.growthExtreme = top ? 'max' : 'none';
+      button.textContent = label;
+      button.title = title;
+      let armed = false;
+      button.addEventListener('click', () => {
+        if (!armed) { armed = true; button.textContent = armedLabel; button.classList.add('is-armed'); return; }
+        commit(extreme(top));
+      });
+      extremes.append(button);
+    };
+    endButton('무육성으로', '정말 무육성으로', '돌파 · 스킬 · 장비 · 소장품 · 큐브 · 오버로드를 아무것도 안 키운 상태로 둡니다. 컨트롤·버스트 운용은 그대로입니다. 한 번 더 누르면 적용됩니다', false);
+    endButton('육성 MAX로', '정말 MAX로', '돌파 · 스킬 · 장비 · 소장품 · 큐브를 이 캐릭터가 갈 수 있는 끝까지 올립니다. 오버로드 옵션과 컨트롤·버스트 운용은 그대로입니다. 한 번 더 누르면 적용됩니다', true);
+    bodyFold.panel.append(extremes);
+  }
+
+  if (restore) {
+    // 손으로 만진 값을 불러온 프로필로 되돌린다. **두 번 눌러야 적용된다** —
+    // 한 번에 나가면 잘못 눌러 만져 둔 값을 통째로 잃고, 되돌릴 길이 없다
+    // (덱 비우기와 같은 방식).
+    const bar = document.createElement('div');
+    bar.className = 'restore-bar';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'restore-loaded';
+    button.dataset.restoreLoaded = '';
+    button.textContent = restore.label;
+    // **흐리게 두지 않는다.** 「지금 값과 같으면 끄기」를 해 봤는데, 수치 입력은
+    // `emitNumericChange`가 일부러 다시 그리지 않으므로(입력 중 포커스를 잃지 않으려고)
+    // 손을 대도 단추가 꺼진 채로 남는다. 늘 누를 수 있게 두는 편이 낫다 — 같은 값을
+    // 다시 넣는 것은 아무 해가 없다.
+    button.title = '손으로 만진 값을 불러온 그대로 되돌립니다. 한 번 더 누르면 적용됩니다';
+    let armed = false;
+    button.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = '정말 되돌립니다';
+        button.classList.add('is-armed');
+        return;
+      }
+      commit(cloneOverrides(restore.value));
+    });
+    bar.append(button);
+    bodyFold.panel.append(bar);
+  }
+  bodyFold.panel.append(body);
+  container.append(bodyFold.head, bodyFold.panel, cubeField, controlEditor);
+  lastPanels.set(container, [bodyFold.panel]);
+}

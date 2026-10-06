@@ -1,0 +1,179 @@
+import { describe, expect, it } from 'vitest';
+
+import { ShareServer, summarizeBattle, summarizeSquad } from './share-server';
+import type { BattleShare } from './share-code';
+
+const battle: BattleShare = {
+  duration: 180,
+  enemyDef: 0,
+  enemyCode: '',
+  coreEnabled: false,
+  corePx: 52,
+  hasParts: false,
+  seed: 1,
+  optimalRangeWeapons: [],
+  normalHitCoeff: {},
+  immuneWindows: [],
+  elementWindows: [],
+  rngMode: 'random',
+  immuneBlocksBurst: false,
+  burstRegenTime: 0,
+  burstReaction: 0.05,
+};
+
+/** 응답 하나짜리 가짜 fetch. 무엇을 보냈는지도 함께 들여다본다. */
+function fakeFetch(reply: unknown, status = 200) {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify(reply), { status });
+  }) as unknown as typeof fetch;
+  return { fetcher, calls };
+}
+
+describe('share server client', () => {
+  it('keeps long range summaries within the upload limit without shortening the actual code',async()=>{
+    const {fetcher,calls}=fakeFetch({item:{id:'a1'},existed:false});
+    const input={kind:'boss' as const,name:'test',by:'',auto:'구간 '.repeat(100),code:'NK3-range-code'};
+    await new ShareServer('https://share.example.com',fetcher).upload(input);
+    const sent=JSON.parse(String(calls[0]!.init!.body));
+    expect(sent.auto.length).toBe(160);expect(sent.code).toBe(input.code);expect(input.auto.length).toBe(300);
+  });
+  it('asks for one kind and fills in what the server left out', async () => {
+    const { fetcher, calls } = fakeFetch({ items: [{ id: 'a1' }] });
+    const result = await new ShareServer('https://share.example.com/', fetcher).list('boss');
+
+    expect(calls[0]!.url).toBe('https://share.example.com/list?kind=boss');
+    expect(result.items).toHaveLength(1);
+    // 서버가 mine을 빠뜨려도 목록은 그려져야 한다.
+    expect(result.mine).toEqual({});
+  });
+
+  it('sends the vote as JSON and returns the new counts', async () => {
+    const { fetcher, calls } = fakeFetch({ id: 'a1', up: 3, down: 0, mine: 1 });
+    const result = await new ShareServer('https://share.example.com', fetcher).vote('squad', 'a1', 1);
+
+    expect(calls[0]!.url).toBe('https://share.example.com/vote');
+    expect(JSON.parse(String(calls[0]!.init!.body))).toEqual({ kind: 'squad', id: 'a1', value: 1 });
+    expect(result).toEqual({ id: 'a1', up: 3, down: 0, mine: 1 });
+  });
+
+  it('surfaces the server message instead of a bare status', async () => {
+    const { fetcher } = fakeFetch({ error: '오늘 올릴 수 있는 개수를 넘었습니다.' }, 429);
+    await expect(new ShareServer('https://share.example.com', fetcher)
+      .upload({ kind: 'boss', name: 'x', by: '', auto: '', code: 'NK3-aa' }))
+      .rejects.toThrow('오늘 올릴 수 있는 개수를 넘었습니다.');
+  });
+
+  it('보낸다 — 코멘트 · 항목 · 비밀번호를 한 몸으로', async () => {
+    const { fetcher, calls } = fakeFetch({ item: { id: 'f1', reply: '고쳤습니다.', replyAt: '2026-09-04T00:00:00Z' } });
+    const item = await new ShareServer('https://share.example.com', fetcher)
+      .replyFeedback('f1', '고쳤습니다.', 'pw');
+
+    expect(calls[0]!.url).toBe('https://share.example.com/feedback/reply');
+    expect(JSON.parse(String(calls[0]!.init!.body)))
+      .toEqual({ id: 'f1', reply: '고쳤습니다.', password: 'pw' });
+    expect(item.reply).toBe('고쳤습니다.');
+  });
+
+  it('레이드 랭킹은 비밀번호가 있을 때만 어드민 길로 간다', async () => {
+    const { fetcher, calls } = fakeFetch({ raid: { id: 'r1' }, entries: [] });
+    const server = new ShareServer('https://share.example.com', fetcher);
+    await server.raidBoard('r1');
+    expect(calls[0]!.url).toBe('https://share.example.com/raid/board?id=r1');
+    expect(calls[0]!.init).toBeUndefined();
+    await server.raidBoard('r1', 'pw');
+    expect(calls[1]!.url).toBe('https://share.example.com/raid/board');
+    expect(JSON.parse(String(calls[1]!.init!.body))).toEqual({ id: 'r1', password: 'pw' });
+  });
+
+  it('기록 제출은 스펙까지 한 몸으로 보낸다', async () => {
+    const { fetcher, calls } = fakeFetch({ entry: { eid: 'e1', decks: [], total: 1, engine: '', at: '' }, kept: false });
+    const result = await new ShareServer('https://share.example.com', fetcher).submitRaidEntry({
+      id: 'r1', openid: '1234', name: 'MORIS', area: 83, decks: [], total: 1, engine: 'x', spec: { a: 1 },
+    });
+    expect(calls[0]!.url).toBe('https://share.example.com/raid/entry');
+    expect(JSON.parse(String(calls[0]!.init!.body)).spec).toEqual({ a: 1 });
+    expect(result.kept).toBe(false);
+  });
+
+  it('falls back to a readable message when the body is not JSON', async () => {
+    const fetcher = (async () => new Response('nope', { status: 502 })) as unknown as typeof fetch;
+    await expect(new ShareServer('https://share.example.com', fetcher).list('boss'))
+      .rejects.toThrow('서버가 응답하지 않았습니다 (502).');
+  });
+});
+
+describe('auto summaries', () => {
+  it('includes timed effective range weapons, disabled windows and the outside baseline',()=>{
+    const summary=summarizeBattle({...battle,optimalRangeWeapons:['SG'],optimalRangeWindows:[{from:30,to:60,weapons:['AR','MG']},{from:90,to:120,weapons:[]}]});
+    expect(summary).toContain('유효 사거리 30~60초 AR·MG / 90~120초 없음 (구간 밖: SG)');
+  });
+  it('reads the battle back as one line', () => {
+    expect(summarizeBattle(battle)).toBe('180초 · 샷건 명중 100% · 무속성 · 코어 없음 · 난수');
+    expect(summarizeBattle({
+      ...battle,
+      duration: 90,
+      enemyCode: '수냉',
+      coreEnabled: true,
+      corePx: 60,
+      hasParts: true,
+      optimalRangeWeapons: ['AR', 'SMG'],
+      immuneWindows: [{ from: 10, to: 20 }],
+      elementWindows: [{ from: 30, to: 40, code: '작열' }],
+      rngMode: 'expected',
+    })).toBe('90초 · 샷건 명중 100% · 적 수냉 · 코어 60px · 파츠 · 적정 AR·SMG · 족자 1 · 속저 1 · 기대값');
+  });
+
+  it('약어 사전과 피드백을 주고받는다', async () => {
+    const { fetcher, calls } = fakeFetch({
+      rules: [
+        { key: '리', names: ['리타'], count: 3 },
+        { key: '', names: ['버림받는다'], count: 9 },
+        { key: '센', names: [], count: 1 },
+      ],
+    });
+    const server = new ShareServer('https://share.example.com', fetcher);
+    // 글자나 이름이 빈 줄은 사전에 넣지 않는다 — 넣으면 아무 데나 걸린다.
+    expect(await server.abbrevRules()).toEqual([{ key: '리', names: ['리타'], count: 3 }]);
+
+    await server.addAbbrev('풍풍', ['아스카 : WILLE', '레이 (가칭)']);
+    expect(calls[1]!.url).toBe('https://share.example.com/abbrev');
+    expect(JSON.parse(String(calls[1]!.init?.body)))
+      .toEqual({ key: '풍풍', names: ['아스카 : WILLE', '레이 (가칭)'] });
+  });
+
+  it('서버가 아직 모르는 공유 종류도 알아들을 말로 답한다', async () => {
+    // 종류를 새로 들이면 사이트가 먼저 나가고 Worker는 나중에 배포된다. 그 사이에
+    // 「알 수 없는 공유 종류입니다」가 그대로 뜨면 자기가 뭘 잘못한 줄 안다.
+    const { fetcher } = fakeFetch({ error: '알 수 없는 공유 종류입니다.' }, 400);
+    const server = new ShareServer('https://share.example.com', fetcher);
+    await expect(server.list('maker')).rejects.toThrow('서버가 아직 준비되지 않았습니다');
+  });
+
+  it('아직 새 기능을 모르는 서버에는 알아들을 말로 답한다', async () => {
+    // 사이트가 먼저 나가고 Worker는 나중에 배포된다 — 그 사이에 「없는 경로입니다」가
+    // 그대로 뜨면 무슨 뜻인지 알 수 없다.
+    const { fetcher } = fakeFetch({ error: '없는 경로입니다.' }, 404);
+    const server = new ShareServer('https://share.example.com', fetcher);
+    await expect(server.feedbackList()).rejects.toThrow('피드백 서버가 아직 준비되지 않았습니다');
+  });
+
+  it('names the squad, and counts decks in five-deck mode', () => {
+    const decks = [
+      { squad: ['리타', '크라운', '', '', ''] },
+      { squad: ['앨리스', '나가', '', '', ''] },
+      { squad: ['', '', '', '', ''] },
+    ];
+    expect(summarizeSquad(decks, false)).toBe('리타/크라운');
+    expect(summarizeSquad(decks, true)).toBe('2덱 · 4명');
+    // 5덱 모드라도 실제로 한 덱만 찼으면 이름이 더 쓸모 있다.
+    expect(summarizeSquad([decks[0]!], true)).toBe('리타/크라운');
+
+    // 이름 안에 «:»가 든 캐릭터가 섞여도 한 명씩 끊어 읽힌다.
+    expect(summarizeSquad(
+      [{ squad: ['크라운', '아니스 : 스타', '라피 : 레드 후드', '미하라 : 본딩 체인', '마스트 : 로망틱 메이드'] }],
+      false,
+    )).toBe('크라운/아니스 : 스타/라피 : 레드 후드/미하라 : 본딩 체인/마스트 : 로망틱 메이드');
+  });
+});

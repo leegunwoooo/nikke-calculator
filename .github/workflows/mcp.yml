@@ -1,0 +1,29 @@
+name: MCP checks
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nikke_mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: nikke_mcp/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: docker build -f nikke_mcp/Dockerfile -t nikke-mcp .
+        working-directory: .
+      - name: Verify container browser relay transport
+        run: |
+          docker run -d --name nikke-mcp -p 127.0.0.1:8000:8000 -e NIKKE_MCP_ALLOWED_HOSTS=127.0.0.1:8000 nikke-mcp
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
+          node smoke.mjs --url http://127.0.0.1:8000/mcp

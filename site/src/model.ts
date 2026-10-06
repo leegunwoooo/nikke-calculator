@@ -1,0 +1,460 @@
+import { sequenceForDeck, trimSequence } from './burst-order';
+import { hacksForRequest } from './hacks';
+import { lang, t } from './i18n';
+import type {
+  BatchResult,
+  BattleSettings,
+  CharacterOverrides,
+  DeckResultEntry,
+  DeckState,
+  SimulationRequest,
+} from './types';
+
+const integerInRange = (value: number, min: number, max: number): boolean =>
+  Number.isInteger(value) && value >= min && value <= max;
+
+/** 엔진 기본 스펙과 같은 값. 이것과 같으면 요청에 싣지 않는다(캐시 키가 갈리지 않게). */
+/**
+ * 신식 적정거리의 기준 거리(중거리 — 코어 직경 입력이 이 거리의 크기다)와 입력 범위.
+ * 정본은 `data/weapon_mechanics.json`의 `distance`(reference·min·max) — 엔진이 같은 값으로 다시 검증한다.
+ */
+export const DISTANCE_REFERENCE = 30;
+export const DISTANCE_MIN = 5;
+export const DISTANCE_MAX = 100;
+
+export const DEFAULT_SYNCHRO_LEVEL = 400;
+
+/**
+ * 싱크로 레벨 상한 — **인게임 캐릭터 레벨 상한**이다(블라블라링크 CDN
+ * `/character/CharacterLevelTable.json`이 1~1400을 담는다).
+ */
+export const SYNCHRO_MAX = 1400;
+/**
+ * 실측이 닿는 곳. 1000까지는 스탯표(`level_stats.json`)이고, 1161까지는
+ * 블라블라링크 도감의 레벨업 미리보기에서 잰 값(`level_beyond.json`)이다.
+ * 이 위만 추정이라, 화면이 그때만 «추정»이라고 적는다.
+ */
+export const SYNCHRO_MEASURED_MAX = 1161;
+/** 버스트 반응속도 기본값(초). 엔진 `DEFAULT_CONFIG`와 같은 값이다. */
+export const DEFAULT_BURST_REACTION = 0.05;
+
+/**
+ * 엔진에 보낼 수 있는 모양으로 추린다 — **화면 전용 값은 뺀다.**
+ *
+ * 부위별 오버로드 줄은 사람이 고르는 단위일 뿐이고, 엔진이 받는 것은 그 줄들을 더한
+ * `overload` 합계다. 엔진은 모르는 키를 오류로 끊으므로(«지원하지 않는 캐릭터 설정»),
+ * 그대로 보내면 계산이 통째로 막힌다.
+ *
+ * 딜 계산은 `normalizeCharacters`가 흰 목록으로 이미 걸러 낸다 — 이 함수는 그 목록을
+ * 지나지 않는 곳(전투력)이 쓴다.
+ */
+export function overridesForEngine(value: CharacterOverrides): CharacterOverrides {
+  const { overloadLines: _screenOnly, ...rest } = value;
+  return rest;
+}
+
+export function normalizeRequest(request: SimulationRequest): SimulationRequest {
+  const squad = request.squad.map((name) => name.trim()).filter(Boolean);
+  const characters = normalizeCharacters(request.characters, squad);
+  const customForSquad = pickCustomForSquad(request.customCharacters, squad);
+  return {
+    squad,
+    ...(Object.keys(characters).length > 0 ? { characters } : {}),
+    ...(customForSquad ? { customCharacters: customForSquad } : {}),
+    duration: Math.trunc(request.duration),
+    enemyDef: Math.trunc(request.enemyDef),
+    enemyCode: request.enemyCode,
+    corePx: Math.trunc(request.corePx),
+    ...(request.shotgunModel !== undefined ? { shotgunModel: request.shotgunModel } : {}),
+    ...(request.shotgunSizeWindows?.length ? { shotgunSizeWindows: request.shotgunSizeWindows.map(w => ({ ...w })) } : {}),
+    ...(request.shotgunTargetDiameter !== undefined ? { shotgunTargetDiameter: request.shotgunTargetDiameter } : {}),
+    ...(request.shotgunHitRate !== undefined ? { shotgunHitRate: request.shotgunHitRate } : {}),
+    ...(request.shotgunGeometry ? { shotgunGeometry: structuredClone(request.shotgunGeometry) } : {}),
+    hasParts: Boolean(request.hasParts),
+    seed: Math.trunc(request.seed),
+    // 고른 순서가 달라도 같은 설정이다 — 정렬해 캐시 키가 갈리지 않게 한다.
+    // 신식은 거리가 적정거리를 정하니 구식 두 값을 싣지 않는다(캐시 키도 갈리지 않게).
+    ...(request.rangeModel !== 'distance' && request.optimalRangeWeapons?.length
+      ? { optimalRangeWeapons: [...request.optimalRangeWeapons].sort() } : {}),
+    // 구식은 이 셋을 싣지 않는다 — 신식이 생기기 전의 요청·캐시 키와 똑같게.
+    ...(request.rangeModel === 'distance' ? {
+      rangeModel: 'distance' as const,
+      distance: request.distance ?? DISTANCE_REFERENCE,
+      ...(request.distanceWindows?.length ? { distanceWindows:
+        [...request.distanceWindows].sort((a, b) => a.from - b.from || a.to - b.to || a.distance - b.distance) } : {}),
+    } : {}),
+    // 보스 페이즈는 시작 시각순으로 세운다 — 넣은 순서가 달라도 같은 설정이다.
+    ...(request.defenseRateWindows?.length ? { defenseRateWindows:
+      [...request.defenseRateWindows].sort((a, b) => a.from - b.from || a.to - b.to || a.rate - b.rate) } : {}),
+    ...(request.rangeModel !== 'distance' && request.optimalRangeWindows?.length ? { optimalRangeWindows: request.optimalRangeWindows.map(w => ({ ...w, weapons: [...new Set(w.weapons)].sort() })).sort((a, b) => a.from - b.from || a.to - b.to || a.weapons.join(',').localeCompare(b.weapons.join(','))) } : {}),
+    ...(request.coreWindows?.length ? { coreWindows:
+      [...request.coreWindows].sort((a, b) => a.from - b.from || a.to - b.to) } : {}),
+    ...(request.immuneWindows?.length ? { immuneWindows:
+      [...request.immuneWindows].sort((a, b) => a.from - b.from || a.to - b.to) } : {}),
+    ...(request.elementWindows?.length ? { elementWindows:
+      [...request.elementWindows].sort((a, b) => a.from - b.from || a.to - b.to) } : {}),
+    // **언제나 싣는다.** 「기본값이니 빼도 된다」고 뺐다가, 빠지면 난수로 읽는 브리지와
+    // 기본값이 어긋나 기대값으로 둔 사람들이 내내 난수 모드로 계산하고 있었다. 경계를
+    // 넘는 값은 양쪽이 같은 기본값을 안다고 믿지 말고 그냥 적어 보낸다.
+    rngMode: request.rngMode ?? 'expected',
+    // 손으로 정한 버스트 순서. 안 정했으면 아예 안 싣는다 — 옛 캐시 키와 갈리지 않게.
+    ...(trimSequence(request.burstSequence)
+      ? { burstSequence: trimSequence(request.burstSequence)! } : {}),
+    // 기본값(켜짐)은 요청·캐시 키에서 뺀다.
+    ...(request.immuneBlocksBurst === false ? { immuneBlocksBurst: false } : {}),
+    // 핵은 켠 것이 있을 때만 싣는다 — 안 켠 사람의 캐시 키가 갈리지 않게.
+    ...(hacksForRequest(request.hacks) ? { hacks: hacksForRequest(request.hacks)! } : {}),
+    // 평타 계수도 캐시 키에 실린다 — 값이 다른 결과가 섞이면 안 된다. 키 순서가
+    // 흔들려도 같은 설정이므로 정렬해 싣는다.
+    ...(normalizeRecord(request.normalHitCoeff)
+      ? { normalHitCoeff: normalizeRecord(request.normalHitCoeff)! } : {}),
+    // 게이지 방식은 **언제나** 싣는다 — 안 주면 신 방식이고, 그 결과는 옛(고정 시간) 캐시와 다르다.
+    burstGaugeMode: request.burstGaugeMode === 'legacy' ? 'legacy' : 'new',
+    ...(request.burstRegenTime !== undefined
+      ? { burstRegenTime: request.burstRegenTime } : {}),
+    // 기본값(0.05초)은 요청에서 뺀다 — 엔진이 같은 값을 쓰므로 옛 캐시 키와 갈리지 않는다.
+    firstBurstTime: request.firstBurstTime ?? 0,
+    ...(request.burstReaction !== undefined && request.burstReaction !== DEFAULT_BURST_REACTION
+      ? { burstReaction: request.burstReaction } : {}),
+    // 기본 레벨(400)은 요청에서 뺀다 — 엔진이 같은 값을 쓰므로 옛 캐시 키와 갈리지 않는다.
+    ...(request.synchroLevel !== undefined && request.synchroLevel !== DEFAULT_SYNCHRO_LEVEL
+      ? { synchroLevel: Math.trunc(request.synchroLevel) } : {}),
+    // 보스 메이커에서만 쓰는 둘. 안 켠 요청에는 아예 싣지 않는다 — 옛 캐시 키와
+    // 갈리지 않게 하려는 것으로, 다른 필드와 같은 규칙이다.
+    ...(request.partBreakInterval ? { partBreakInterval: request.partBreakInterval } : {}),
+    ...(request.shotTrack ? { shotTrack: true } : {}),
+    ...(request.shotgunReport ? { shotgunReport: true } : {}),
+    ...(request.stateTrack ? { stateTrack: true } : {}),
+    ...(request.piercePass && (request.piercePass.shapes > 1 || request.piercePass.parts > 0)
+      ? { piercePass: request.piercePass } : {}),
+    ...(request.console ? { console: {
+      common_level: Math.trunc(request.console.common_level),
+      class_level: normalizeBuckets(request.console.class_level),
+      company_level: normalizeBuckets(request.console.company_level),
+    } } : {}),
+  };
+}
+
+// 스쿼드에 실제로 편성된 커스텀 니케만 요청·캐시키에 싣는다.
+function pickCustomForSquad(
+  custom: SimulationRequest['customCharacters'],
+  squad: string[],
+): SimulationRequest['customCharacters'] | undefined {
+  if (!custom) return undefined;
+  const picked: NonNullable<SimulationRequest['customCharacters']> = {};
+  for (const name of squad) if (custom[name]) picked[name] = custom[name]!;
+  return Object.keys(picked).length > 0 ? picked : undefined;
+}
+
+// 소속별 콘솔은 키 순서가 흔들려도 같은 설정이다 — 캐시 키가 갈리지 않게 정렬한다.
+function normalizeBuckets(values: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .map(([bucket, level]) => [bucket, Math.trunc(level)] as const)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function normalizeRecord(values: Record<string, number> | undefined): Record<string, number> | undefined {
+  if (!values) return undefined;
+  const entries = Object.entries(values)
+    .filter(([, value]) => Number.isFinite(value))
+    .sort(([left], [right]) => left.localeCompare(right));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeCharacters(
+  raw: Record<string, CharacterOverrides> | undefined,
+  squad: string[],
+): Record<string, CharacterOverrides> {
+  const result: Record<string, CharacterOverrides> = {};
+  for (const name of squad) {
+    const value = raw?.[name];
+    if (!value) continue;
+    const skillLevels = value.skillLevels ? { ...value.skillLevels } : undefined;
+    const overload = normalizeRecord(value.overload);
+    const manualStats = normalizeRecord(value.manualStats);
+    const normalized: CharacterOverrides = {
+      ...(value.growthStage !== undefined ? { growthStage: value.growthStage } : {}),
+      ...(skillLevels ? { skillLevels } : {}),
+      ...(overload ? { overload } : {}),
+      ...(value.cube ? {
+        cube: { name: value.cube.name, level: Math.trunc(value.cube.level) },
+      } : {}),
+      ...(value.collection ? {
+        collection: {
+          stage: value.collection.stage,
+          favorite: Math.trunc(value.collection.favorite),
+        },
+      } : {}),
+      ...(manualStats ? { manualStats } : {}),
+      ...(value.burst ? { burst: value.burst } : {}),
+      ...(value.equipLevels && Object.keys(value.equipLevels).length > 0
+        ? { equipLevels: { ...value.equipLevels } } : {}),
+      ...(value.control !== undefined ? { control: value.control } : {}),
+      ...(value.weaponModeSwapAt !== undefined
+        ? { weaponModeSwapAt: value.weaponModeSwapAt } : {}),
+    };
+    if (Object.keys(normalized).length > 0) result[name] = normalized;
+  }
+  return result;
+}
+
+export function validateRequest(request: SimulationRequest): string[] {
+  const errors: string[] = [];
+  const squad = request.squad.map((name) => name.trim()).filter(Boolean);
+
+  if (squad.length === 0) {
+    errors.push('스쿼드에 캐릭터를 1명 이상 편성해 주세요.');
+  } else if (squad.length > 5) {
+    errors.push('스쿼드는 최대 5명까지 편성할 수 있습니다.');
+  }
+  if (new Set(squad).size !== squad.length) {
+    errors.push('같은 캐릭터를 두 번 편성할 수 없습니다.');
+  }
+  if (!integerInRange(request.duration, 10, 180)) {
+    errors.push('전투 시간은 10~180초여야 합니다.');
+  }
+  if (request.synchroLevel !== undefined && !integerInRange(request.synchroLevel, 1, SYNCHRO_MAX)) {
+    errors.push(`싱크로 레벨은 1~${SYNCHRO_MAX}이어야 합니다.`);
+  }
+  if (!integerInRange(request.enemyDef, 0, 999_999)) {
+    errors.push('적 방어력은 0~999999여야 합니다.');
+  }
+  if (!integerInRange(request.corePx, 0, 1_000)) {
+    errors.push('코어 직경은 0~1000px여야 합니다.');
+  }
+  if (!integerInRange(request.seed, 0, 2_147_483_647)) {
+    errors.push('시드는 0~2147483647 사이의 정수여야 합니다.');
+  }
+  if (request.burstRegenTime !== undefined
+      && !(Number.isFinite(request.burstRegenTime)
+        && request.burstRegenTime >= 0 && request.burstRegenTime <= 20)) {
+    errors.push('버스트 게이지 충전 시간은 0~20초여야 합니다.');
+  }
+  const sizes = request.shotgunSizeWindows ?? [];
+  if (sizes.length > 100 || sizes.some(w => ![w.from, w.to, w.diameter].every(Number.isFinite) || w.from < 0 || w.to <= w.from || w.to > 180 || w.diameter < 1 || w.diameter > 2000)) errors.push('보스 크기 구간은 0~180초, 시작 < 종료, 직경 1~2000으로 입력하세요.');
+  if (sizes.some((w, i) => sizes.slice(i + 1).some(v => w.from < v.to && v.from < w.to))) errors.push('보스 크기 구간은 서로 겹칠 수 없습니다.');
+  if (request.shotgunModel !== undefined && !['legacy', 'spatial-v1', 'spatial-convergence-v1'].includes(request.shotgunModel)) errors.push('샷건 계산 방식이 올바르지 않습니다.');
+  if (request.shotgunTargetDiameter !== undefined && (!Number.isFinite(request.shotgunTargetDiameter) || request.shotgunTargetDiameter < 1 || request.shotgunTargetDiameter > 2000)) errors.push('보스 판정 직경은 1~2000이어야 합니다.');
+  if (request.shotgunHitRate !== undefined && (!Number.isFinite(request.shotgunHitRate) || request.shotgunHitRate < 0 || request.shotgunHitRate > 1)) {
+    errors.push('샷건 펠릿 명중 확률은 0~100%여야 합니다.');
+  }
+  if (request.firstBurstTime !== undefined && (!Number.isFinite(request.firstBurstTime) || request.firstBurstTime < 0 || request.firstBurstTime > 3600)) {
+    errors.push('첫 버스트 시간은 0~3600초여야 합니다.');
+  }
+  if (request.burstReaction !== undefined
+      && !(Number.isFinite(request.burstReaction)
+        && request.burstReaction >= 0 && request.burstReaction <= 3)) {
+    errors.push('버스트 반응속도는 0~3초여야 합니다.');
+  }
+  // 보스 페이즈 — 시작이 끝보다 뒤면 조용히 뒤집지 않고 막는다. 엔진도 같은 규칙이다.
+  const windows: Array<[{ from: number; to: number }, string]> = [
+    ...(request.defenseRateWindows ?? []).map((w) => [w, '바디 방어율'] as [typeof w, string]),
+    ...(request.optimalRangeWindows ?? []).map((w) => [w, '유효 사거리'] as [typeof w, string]),
+    ...(request.distanceWindows ?? []).map((w) => [w, '거리'] as [typeof w, string]),
+    ...(request.coreWindows ?? []).map((w) => [w, '코어 노출'] as [typeof w, string]),
+    ...(request.immuneWindows ?? []).map((w) => [w, '족자'] as [typeof w, string]),
+    ...(request.elementWindows ?? []).map((w) => [w, '속저'] as [typeof w, string]),
+  ];
+  for (const [w, label] of windows) {
+    if (!Number.isFinite(w.from) || !Number.isFinite(w.to)
+        || w.from < 0 || w.to > 180 || w.from < 0) {
+      errors.push(`${label} 구간은 0~180초여야 합니다.`);
+    } else if (w.from >= w.to) {
+      errors.push(`${label} 구간은 시작이 끝보다 앞서야 합니다 (${w.from}~${w.to}).`);
+    }
+  }
+
+  if ((request.optimalRangeWindows?.length ?? 0) > 100) errors.push('유효 사거리 구간은 최대 100개까지 지정할 수 있습니다.');
+  for (const w of request.optimalRangeWindows ?? []) {
+    if (!Array.isArray(w.weapons) || w.weapons.some(weapon => !['AR', 'SMG', 'SG', 'MG', 'SR', 'RL'].includes(weapon))) errors.push('유효 사거리 구간의 무기군을 확인해 주세요.');
+  }
+
+  // 풀차징컨은 사람이 잡은 한 명이다(엔진도 같은 규칙으로 막는다).
+  const fullChargers = Object.entries(request.characters ?? {})
+    .filter(([name, c]) => request.squad.includes(name) && c?.control?.full_charge !== undefined);
+  if (fullChargers.length > 1) {
+    errors.push(`풀차징컨은 덱마다 한 명만 켤 수 있습니다 (${fullChargers.map(([name]) => name).join(', ')}).`);
+  }
+
+  if (request.rangeModel === 'distance') {
+    const inRange = (d: number) => Number.isFinite(d) && d >= DISTANCE_MIN && d <= DISTANCE_MAX;
+    if (!inRange(request.distance ?? DISTANCE_REFERENCE)) errors.push(`거리는 ${DISTANCE_MIN}~${DISTANCE_MAX}여야 합니다.`);
+    if ((request.distanceWindows?.length ?? 0) > 100) errors.push('거리 구간은 최대 100개까지 지정할 수 있습니다.');
+    if ((request.distanceWindows ?? []).some((w) => !inRange(w.distance))) errors.push(`거리 구간의 거리는 ${DISTANCE_MIN}~${DISTANCE_MAX}여야 합니다.`);
+  }
+
+  if ((request.defenseRateWindows?.length ?? 0) > 100) errors.push('바디 방어율 구간은 최대 100개까지 지정할 수 있습니다.');
+  for (const w of request.defenseRateWindows ?? []) {
+    if (!Number.isFinite(w.rate) || w.rate < 0 || w.rate > 100) {
+      errors.push('바디 방어율은 0~100%여야 합니다.');
+    }
+  }
+
+  if (request.console) {
+    const levels: Array<[number, string]> = [
+      [request.console.common_level, '공통'],
+      ...Object.entries(request.console.class_level)
+        .map(([bucket, level]) => [level, `클래스(${bucket})`] as [number, string]),
+      ...Object.entries(request.console.company_level)
+        .map(([bucket, level]) => [level, `기업(${bucket})`] as [number, string]),
+    ];
+    for (const [level, label] of levels) {
+      if (!integerInRange(level, 0, 1_000)) {
+        errors.push(`${label} 콘솔 레벨은 0~1000 사이의 정수여야 합니다.`);
+      }
+    }
+  }
+
+  return errors;
+}
+
+export function cacheKey(request: SimulationRequest, version: string): string {
+  const normalized = normalizeRequest(request);
+  return JSON.stringify({ version, ...normalized });
+}
+
+export function validateDecks(decks: DeckState[]): string[] {
+  const errors: string[] = [];
+  const nonEmpty = decks.filter((deck) => deck.squad.some((name) => name.trim()));
+  if (nonEmpty.length === 0) {
+    errors.push('캐릭터가 편성된 덱이 하나 이상 필요합니다.');
+    return errors;
+  }
+  for (const deck of nonEmpty) {
+    const names = deck.squad.map((name) => name.trim()).filter(Boolean);
+    if (names.length > 5) {
+      errors.push(`덱 ${deck.id}: 캐릭터는 최대 5명까지 편성할 수 있습니다.`);
+    }
+    if (new Set(names).size !== names.length) {
+      errors.push(`덱 ${deck.id}: 같은 캐릭터를 두 번 편성할 수 없습니다.`);
+    }
+  }
+  return errors;
+}
+
+export function requestForDeck(
+  deck: DeckState,
+  battle: BattleSettings,
+  customCharacters?: SimulationRequest['customCharacters'],
+  /**
+   * 장탄·재장전 트랙을 함께 받을지. 기본은 받는다 — 계산기 타임라인이 쓴다.
+   * **총딜만 읽는 자리는 꺼야 한다**(유니온 레이드는 판이 수백 개라, 안 읽을 트랙을
+   * 판마다 만들어 실어 나르는 값이 그대로 기다림이 된다).
+   */
+  options: { stateTrack?: boolean } = {},
+): SimulationRequest {
+  return normalizeRequest({
+    squad: deck.squad,
+    characters: deck.characters,
+    ...(customCharacters ? { customCharacters } : {}),
+    duration: battle.duration,
+    synchroLevel: battle.synchroLevel,
+    enemyDef: battle.enemyDef,
+    enemyCode: battle.enemyCode,
+    // 덱마다 코어 유무를 따로 잡아 뒀으면 그 값이 이긴다.
+    corePx: (battle.corePerDeck?.[deck.id] ?? battle.coreEnabled) ? battle.corePx : 0,
+    hasParts: battle.hasParts,
+    seed: battle.seed,
+    optimalRangeWeapons: battle.optimalRangeWeapons,
+    coreWindows: battle.coreWindows,
+    optimalRangeWindows: battle.optimalRangeWindows,
+    ...(battle.rangeModel === 'distance' ? {
+      rangeModel: 'distance' as const,
+      distance: battle.distance ?? DISTANCE_REFERENCE,
+      distanceWindows: battle.distanceWindows ?? [],
+    } : {}),
+    defenseRateWindows: battle.defenseRateWindows,
+    immuneWindows: battle.immuneWindows,
+    elementWindows: battle.elementWindows,
+    rngMode: battle.rngMode,
+    immuneBlocksBurst: battle.immuneBlocksBurst,
+    ...(hacksForRequest(battle.hacks) ? { hacks: battle.hacks! } : {}),
+    normalHitCoeff: battle.normalHitCoeff,
+    ...(battle.shotgunSizeWindows?.length ? { shotgunSizeWindows: battle.shotgunSizeWindows.map(w => ({ ...w })) } : {}),
+    ...(battle.shotgunModel ? { shotgunModel: battle.shotgunModel, shotgunTargetDiameter: battle.shotgunTargetDiameter ?? 360 } : {}),
+    shotgunHitRate: battle.shotgunHitRate ?? 1,
+    console: battle.console,
+    // 덱마다 따로 잡아 뒀으면 그 값이 이긴다 — 버스트 쿨이 밀리는 덱만 달리 잰다.
+    // 게이지 방식은 언제나 싣는다 — 신 방식이 기본이 된 뒤의 결과와 옛 캐시가 섞이면 안 된다.
+    burstGaugeMode: battle.burstGaugeMode ?? 'new',
+    burstRegenTime: battle.burstRegenPerDeck?.[deck.id] ?? battle.burstRegenTime,
+    burstReaction: battle.burstReaction,
+    firstBurstTime: battle.firstBurstPerDeck?.[deck.id] ?? battle.firstBurstTime ?? 0,
+    // 편성이 바뀌었으면 없는 이름을 떨궈서 싣는다 — 조용히 틀린 순서로 돌지 않게.
+    ...(sequenceForDeck(deck) ? { burstSequence: sequenceForDeck(deck)! } : {}),
+    // 장탄·재장전 트랙. 타임라인의 「장탄 표시」가 쓴다 — 딜이 끊긴 자리가 재장전인지
+    // 버프가 꺼진 것인지는 이 줄이 없으면 못 가른다.
+    ...(options.stateTrack === false ? {} : { stateTrack: true }),
+  });
+}
+
+export function resetEnemy(battle: BattleSettings): BattleSettings {
+  return {
+    ...battle,
+    enemyDef: 31_784,
+    enemyCode: '',
+    coreEnabled: false,
+    corePx: 52,
+    bossSize: 'large',
+    ...(battle.shotgunModel ? { shotgunTargetDiameter: 360 } : {}),
+    shotgunHitRate: 1,
+    hasParts: false,
+    corePerDeck: {},
+    optimalRangeWeapons: [],
+    optimalRangeWindows: [],
+    // 거리는 보스마다 다르다 — 방식(신식·구식)은 두고 값만 기준 거리로 되돌린다.
+    distance: DISTANCE_REFERENCE,
+    distanceWindows: [],
+    shotgunSizeWindows: [],
+    coreWindows: [],
+    defenseRateWindows: [],
+    immuneWindows: [],
+    elementWindows: [],
+  };
+}
+
+export function aggregateDeckResults(decks: DeckResultEntry[]): BatchResult {
+  return {
+    total: decks.reduce((sum, entry) => sum + entry.result.squadTotal, 0),
+    decks,
+  };
+}
+
+/**
+ * 줄여 쓴 대미지.
+ *
+ * 자릿수를 끊는 자리는 말마다 다르다 — 한국어·일본어는 **네 자리마다**(억·億) 끊고
+ * 영어는 **세 자리마다**(B·M) 끊는다. 1.24억을 영어로 「1.24억」이라 적으면 그건
+ * 번역이 아니라 그냥 안 읽히는 글자다.
+ */
+export function formatDamage(value: number): string {
+  if (Math.abs(value) < 1_000_000) return Math.round(value).toLocaleString('en-US');
+  if (lang() === 'en') {
+    return Math.abs(value) >= 1_000_000_000
+      ? `${(value / 1_000_000_000).toFixed(2)}B`
+      : `${(value / 1_000_000).toFixed(2)}M`;
+  }
+  return `${(value / 100_000_000).toFixed(2)}${t('억')}`;
+}
+
+export function formatDps(value: number): string {
+  return t('{n}/초', { n: formatDamage(value) });
+}
+
+/**
+ * 줄이지 않은 대미지 — 1의 자리까지.
+ *
+ * 「1.24억」은 한눈에 견주기 좋지만 두 덱이 소수점 둘째 자리까지 같게 보이는 일이
+ * 생긴다. 「자세히 보기」를 켜면 이쪽으로 적는다. 엔진은 처음부터 정수로 세므로
+ * 여기서 정밀해지는 것은 없다 — 있던 자리를 그대로 보일 뿐이다.
+ */
+export const formatExactDamage = (value: number): string =>
+  Math.round(value).toLocaleString('en-US');
+
+/** 줄이지 않은 초당 대미지. 소수점 한 자리까지 — 정수로 자르면 덱 간 차이가 묻힌다. */
+export const formatExactDps = (value: number): string =>
+  t('{n}/초', {
+    n: (Math.round(value * 10) / 10).toLocaleString('en-US', { minimumFractionDigits: 1 }),
+  });

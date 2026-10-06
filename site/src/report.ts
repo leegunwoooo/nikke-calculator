@@ -1,0 +1,438 @@
+// 계산 결과를 한 장짜리 PNG 보고서로 그린다.
+//
+// 커뮤니티에 그대로 붙여넣는 게 목적이라 외부 라이브러리(html2canvas 등) 없이
+// Canvas 2D로 직접 그린다. 초상화는 같은 오리진에서 오므로 캔버스가 오염되지
+// 않아 `toBlob`으로 뽑아낼 수 있다.
+//
+// 레이아웃은 두 가지다.
+//   1덱  → 5덱과 같은 가로 카드: 큰 초상화·개별딜과 작은 평타/스킬 막대
+//   2덱 이상 → 합계 헤드라인 + 최대 5열: 다음 덱은 새 줄에 이어 그린다
+
+import { formatDamage, formatDps } from './model';
+import type { BatchResult, CharacterMeta, DeckResultEntry } from './types';
+
+const FONT = 'Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif';
+
+const COLOR = {
+  bg: '#070d15',
+  panel: '#0b1420',
+  line: 'rgba(146,176,201,.18)',
+  lineSoft: 'rgba(146,176,201,.09)',
+  ink: '#eaf2f8',
+  dim: '#b9c7d3',
+  muted: '#8394a6',
+  cyan: '#45d6d0',
+  amber: '#ffbf3c',
+  track: 'rgba(146,176,201,.13)',
+} as const;
+
+// 내보내기 배율. 2배로 그려야 커뮤니티에서 축소돼도 글자가 뭉개지지 않는다.
+const SCALE = 2;
+
+export interface ReportMeta {
+  siteUrl: string;
+  /** 덱 번호 → 화면에 붙인 이름. 없으면 「덱 N」으로 적는다. */
+  deckNames?: Record<number, string>;
+}
+
+/** 캐릭터 한 명의 보고서용 집계값. */
+export interface ReportRow {
+  name: string;
+  damage: number;
+  share: number;
+  normal: number;
+  skill: number;
+  portrait: HTMLImageElement | null;
+}
+
+/**
+ * 보고서에 실을 캐릭터 줄을 만든다.
+ *
+ * **편성 순서(좌→우)를 그대로 위→아래로 쓴다.** 니케는 배치 순서 자체가 전투에
+ * 영향을 주므로 딜 순으로 재정렬하면 실제 편성과 다른 그림이 된다. 화면의 결과
+ * 목록도 같은 순서다. 빈 슬롯은 뺀다.
+ */
+export const reportRows = (
+  entry: DeckResultEntry,
+  portraits: Map<string, HTMLImageElement>,
+): ReportRow[] => entry.request.squad
+  .filter(Boolean)
+  .map((name) => {
+    const damage = entry.result.charTotals[name] ?? 0;
+    const breakdown = entry.result.charBreakdown?.[name];
+    return {
+      name,
+      damage,
+      share: entry.result.squadTotal > 0 ? damage / entry.result.squadTotal * 100 : 0,
+      normal: breakdown?.normal ?? 0,
+      skill: breakdown?.skill ?? 0,
+      portrait: portraits.get(name) ?? null,
+    };
+  });
+
+/**
+ * 스쿼드에 등장하는 캐릭터의 초상화를 미리 받아 둔다.
+ *
+ * 실패한 이미지는 조용히 빼고 자리만 비운다 — 초상화 하나 때문에 보고서 전체가
+ * 안 나오는 편보다 낫다. 같은 이유로 기다리는 시간에 상한을 둔다. 느리거나
+ * 영영 응답하지 않는 이미지가 하나라도 있으면 보고서가 끝내 안 나오기 때문이다.
+ */
+export async function loadPortraits(
+  names: string[],
+  catalog: Map<string, CharacterMeta>,
+  baseUrl: string,
+  timeoutMs = 5_000,
+): Promise<Map<string, HTMLImageElement>> {
+  const unique = [...new Set(names.filter(Boolean))];
+  const loaded = new Map<string, HTMLImageElement>();
+  await Promise.all(unique.map((name) => new Promise<void>((resolve) => {
+    const src = catalog.get(name)?.image;
+    if (!src) { resolve(); return; }
+    const image = new Image();
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (ok) loaded.set(name, image);
+      resolve();
+    };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    image.onload = () => done(true);
+    image.onerror = () => done(false);
+    image.src = `${baseUrl}${src}`;
+  })));
+  return loaded;
+}
+
+// ── 그리기 도우미 ──────────────────────────────────────────────────────────
+
+const text = (
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+  weight = 400,
+  align: CanvasTextAlign = 'left',
+) => {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(value, x, y);
+};
+
+/** 폭을 넘으면 말줄임표로 자른다 (이름이 긴 캐릭터가 열을 밀어내지 않게). */
+const ellipsis = (ctx: CanvasRenderingContext2D, value: string, size: number, weight: number, max: number): string => {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  if (ctx.measureText(value).width <= max) return value;
+  let cut = value;
+  while (cut.length > 1 && ctx.measureText(`${cut}…`).width > max) cut = cut.slice(0, -1);
+  return `${cut}…`;
+};
+
+const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+};
+
+const line = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, color: string = COLOR.line) => {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, 1);
+};
+
+/** 초상화를 정사각형으로 잘라 그린다. 없으면 자리만 어둡게 채운다. */
+const portrait = (
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | null,
+  x: number,
+  y: number,
+  size: number,
+  radius: number,
+) => {
+  ctx.save();
+  roundRect(ctx, x, y, size, size, radius);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(146,176,201,.10)';
+  ctx.fillRect(x, y, size, size);
+  if (image && image.naturalWidth > 0) {
+    if (image.src?.includes('/temporary-characters/') && image.src.endsWith('-card.png')) {
+      const ratio = size / Math.max(image.naturalWidth, image.naturalHeight);
+      const width = image.naturalWidth * ratio;
+      const height = image.naturalHeight * ratio;
+      ctx.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight,
+        x + (size - width) / 2, y + (size - height) / 2, width, height);
+      ctx.restore();
+      return;
+    }
+    const side = Math.min(image.naturalWidth, image.naturalHeight);
+    ctx.drawImage(
+      image,
+      (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side,
+      x, y, size, size,
+    );
+  }
+  ctx.restore();
+};
+
+const factChips = (ctx: CanvasRenderingContext2D, chips: string[], x: number, y: number): number => {
+  let cursor = x;
+  const height = 22;
+  for (const chip of chips) {
+    ctx.font = `500 11px ${FONT}`;
+    const width = ctx.measureText(chip).width + 18;
+    ctx.strokeStyle = COLOR.line;
+    ctx.lineWidth = 1;
+    roundRect(ctx, cursor, y, width, height, 4);
+    ctx.stroke();
+    text(ctx, chip, cursor + 9, y + 15, 11, COLOR.muted, 500);
+    cursor += width + 6;
+  }
+  return y + height;
+};
+
+/**
+ * 이 판을 잰 조건. **화면이 아니라 `request`에서 읽는다** — 화면의 지금 값은 이 숫자를
+ * 만든 조건이 아닐 수 있다. 조건을 바꾸고 다시 계산하지 않은 채 보고서를 뽑으면
+ * 대미지는 옛것인데 조건만 새것으로 찍혀 나갔다 (피드백 2026-09-10).
+ */
+export const conditionChips = (entry: DeckResultEntry): string[] => {
+  const { request } = entry;
+  const chips = [
+    `${entry.result.duration}초 전투`,
+    `방어력 ${request.enemyDef.toLocaleString('en-US')}`,
+    request.enemyCode ? `${request.enemyCode} 코드` : '코드 없음',
+    request.corePx > 0 ? `코어 ${request.corePx}px` : '코어 없음',
+    // 신식 적정거리 — 코어 직경은 거리 30 기준이라 거리를 같이 적는다.
+    ...(request.rangeModel === 'distance' ? [`거리 ${request.distance ?? 30}${request.distanceWindows?.length ? ` · 거리 구간 ${request.distanceWindows.length}` : ''}`] : []),
+    ...(request.shotgunSizeWindows?.length ? [`보스 크기 구간: ${request.shotgunSizeWindows.map(w => `${w.from}~${w.to}초 직경 ${w.diameter}`).join(' / ')}`] : []),
+    request.shotgunModel && request.shotgunModel !== 'legacy' ? `샷건 탄착군${request.shotgunModel === 'spatial-convergence-v1' ? '·수렴 실험' : ''}: ${request.shotgunGeometry ? '보스 도형' : `직경 ${request.shotgunTargetDiameter ?? 360}`}` : request.shotgunGeometry ? '샷건 명중: 보스 도형' : `샷건 명중 ${Math.round((request.shotgunHitRate ?? 1) * 10000) / 100}%`,
+  ];
+  if (request.hasParts) chips.push('파괴 가능 파츠');
+  chips.push(`시드 ${request.seed}`);
+  return chips;
+};
+
+// ── A · 1덱 가로 카드 ──────────────────────────────────────────────────────
+
+const CARD_W = 1200;
+const PAD = 34;
+const SINGLE_H = 442;
+
+function drawSingle(
+  ctx: CanvasRenderingContext2D,
+  entry: DeckResultEntry,
+  meta: ReportMeta,
+  portraits: Map<string, HTMLImageElement>,
+): number {
+  text(ctx, `NIKKE SQUAD SIM · ${entry.result.duration}s`, PAD, 50, 11, COLOR.cyan, 800);
+  text(ctx, meta.deckNames?.[entry.deckId] ?? '1덱 전투 결과', PAD, 80, 26, COLOR.ink, 800);
+  text(ctx, '스쿼드 총 대미지', CARD_W - PAD, 50, 12, COLOR.muted, 500, 'right');
+  text(ctx, formatDamage(entry.result.squadTotal), CARD_W - PAD, 88, 44, COLOR.ink, 800, 'right');
+  text(ctx, formatDps(entry.result.squadTotal / entry.result.duration), CARD_W - PAD, 110, 12, COLOR.muted, 500, 'right');
+  line(ctx, PAD, 126, CARD_W - PAD * 2);
+
+  const colW = (CARD_W - PAD * 2 - 16 * 4) / 5;
+  reportRows(entry, portraits).forEach((row, index) => {
+    const x = PAD + index * (colW + 16);
+    portrait(ctx, row.portrait, x, 145, 88, 10);
+    text(ctx, `${row.share.toFixed(1)}%`, x + colW, 222, 16, COLOR.muted, 600, 'right');
+    text(ctx, ellipsis(ctx, row.name, 16, 700, colW), x, 259, 16, COLOR.ink, 700);
+    text(ctx, formatDamage(row.damage), x, 290, 28, COLOR.cyan, 800);
+    text(ctx, formatDps(row.damage / entry.result.duration), x, 312, 12, COLOR.muted, 500);
+    const split = row.normal + row.skill;
+    ctx.fillStyle = COLOR.track;
+    ctx.fillRect(x, 326, colW, 4);
+    ctx.fillStyle = COLOR.cyan;
+    ctx.fillRect(x, 326, colW * row.share / 100, 4);
+    if (split > 0) {
+      const normalW = colW * row.share / 100 * row.normal / split;
+      ctx.fillStyle = COLOR.amber;
+      ctx.fillRect(x + normalW, 326, colW * row.share / 100 - normalW, 4);
+      text(ctx, `평타 ${formatDamage(row.normal)}`, x, 350, 11, COLOR.cyan, 500);
+      text(ctx, `스킬 ${formatDamage(row.skill)}`, x + colW, 350, 11, COLOR.amber, 500, 'right');
+    }
+  });
+  factChips(ctx, conditionChips(entry), PAD, 366);
+  text(ctx, meta.siteUrl, PAD, 414, 11, COLOR.muted, 500);
+  text(ctx, `${entry.result.hitCount.toLocaleString('en-US')} 히트`, CARD_W - PAD, 414, 11, COLOR.muted, 500, 'right');
+  return SINGLE_H;
+}
+
+// ── K · 여러 덱 합계 헤드라인 + 최대 5열 ─────────────────────────────────────
+
+const COL_GAP = 16;
+const MAX_COLUMNS = 5;
+
+function drawBatch(
+  ctx: CanvasRenderingContext2D,
+  batch: BatchResult,
+  meta: ReportMeta,
+  portraits: Map<string, HTMLImageElement>,
+  width: number,
+): number {
+  const decks = batch.decks;
+  const duration = decks[0]?.result.duration ?? 1;
+  let y = PAD + 16;
+
+  text(ctx, `NIKKE SQUAD SIM · ${decks.length} DECK · ${duration}s`, PAD, y, 11, COLOR.cyan, 800);
+  text(ctx, '전체 덱 총 대미지', width - PAD, y, 12, COLOR.muted, 500, 'right');
+  y += 30;
+  ctx.font = `800 26px ${FONT}`;
+  ctx.fillStyle = COLOR.ink;
+  ctx.textAlign = 'left';
+  ctx.fillText(`${decks.length}덱 전투 `, PAD, y);
+  const titleWidth = ctx.measureText(`${decks.length}덱 전투 `).width;
+  text(ctx, '결과', PAD + titleWidth, y, 26, COLOR.amber, 800);
+  text(ctx, formatDamage(batch.total), width - PAD, y + 8, 44, COLOR.ink, 800, 'right');
+
+  y += 30;
+  text(ctx, formatDps(batch.total / duration), width - PAD, y, 12, COLOR.muted, 500, 'right');
+  y += 16;
+  line(ctx, PAD, y, width - PAD * 2);
+  y += 26;
+
+  const columns = Math.min(MAX_COLUMNS, decks.length);
+  const colW = (width - PAD * 2 - COL_GAP * (columns - 1)) / columns;
+  let top = y;
+  let bottom = y;
+
+  decks.forEach((entry, index) => {
+    if (index > 0 && index % columns === 0) top = bottom + 26;
+    const x = PAD + (index % columns) * (colW + COL_GAP);
+    let cy = top;
+
+    // 이름을 붙였으면 그대로 싣는다 — 「0장 · 1장 · 2장」처럼 무엇을 견줬는지가
+    // 이미지 한 장에 남아야 자료로 쓸 수 있다.
+    text(ctx, meta.deckNames?.[entry.deckId] ?? `덱 ${entry.deckId}`, x, cy, 13, COLOR.ink, 700);
+    text(ctx, formatDamage(entry.result.squadTotal), x + colW, cy, 15, COLOR.cyan, 800, 'right');
+    cy += 10;
+    line(ctx, x, cy, colW);
+    cy += 16;
+
+    for (const row of reportRows(entry, portraits)) {
+      portrait(ctx, row.portrait, x, cy - 12, 26, 5);
+      const nameX = x + 34;
+      const damageLabel = formatDamage(row.damage);
+      ctx.font = `700 12px ${FONT}`;
+      const damageW = ctx.measureText(damageLabel).width;
+      text(ctx, ellipsis(ctx, row.name, 12, 600, colW - 40 - damageW - 6), nameX, cy, 12, COLOR.dim, 600);
+      text(ctx, damageLabel, x + colW, cy, 12, COLOR.ink, 700, 'right');
+      text(ctx, `${row.share.toFixed(1)}%`, nameX, cy + 13, 10, COLOR.muted, 500);
+      cy += 32;
+    }
+    bottom = Math.max(bottom, cy);
+  });
+
+  y = bottom + 6;
+  line(ctx, PAD, y, width - PAD * 2);
+  y += 22;
+
+  const first = decks[0];
+  y = factChips(ctx, first ? conditionChips(first) : [`${duration}초 전투`], PAD, y);
+  y += 26;
+  const hits = decks.reduce((sum, entry) => sum + entry.result.hitCount, 0);
+  text(ctx, meta.siteUrl, PAD, y, 11, COLOR.muted, 500);
+  text(ctx, `${decks.length}덱 · ${hits.toLocaleString('en-US')} 히트`, width - PAD, y, 11, COLOR.muted, 500, 'right');
+  return y + PAD - 6;
+}
+
+// ── 진입점 ────────────────────────────────────────────────────────────────
+
+/**
+ * 보고서를 그려 캔버스를 돌려준다.
+ *
+ * 높이는 내용에 따라 달라지므로 한 번 재보고(측정용 캔버스) 실제 캔버스를 다시
+ * 그린다. 캔버스는 `SCALE`배로 만들어 축소 표시돼도 글자가 선명하다.
+ */
+export function renderReport(
+  batch: BatchResult,
+  meta: ReportMeta,
+  portraits: Map<string, HTMLImageElement>,
+  createCanvas: () => HTMLCanvasElement = () => document.createElement('canvas'),
+): HTMLCanvasElement {
+  const multi = batch.decks.length > 1;
+  const width = multi ? Math.max(980, 240 * Math.min(MAX_COLUMNS, batch.decks.length)) : CARD_W;
+
+  const measure = createCanvas();
+  const measureCtx = measure.getContext('2d');
+  if (!measureCtx) throw new Error('캔버스를 사용할 수 없는 브라우저입니다.');
+  const single = batch.decks[0];
+  const warning = batch.decks.some(deck => deck.result.previewNote?.includes('[임시 · 창작]'))
+    ? '[임시 · 창작] 캐릭터 포함 — 창작 스킬로 계산한 결과이며 실제 성능과 무관합니다.'
+    : batch.decks.some(deck => deck.result.previewNote)
+      ? '[프리뷰 · 미검증] 캐릭터 포함 — 출시 전 정보 기준입니다.' : '';
+  const contentHeight = multi
+    ? drawBatch(measureCtx, batch, meta, portraits, width)
+    : (single ? drawSingle(measureCtx, single, meta, portraits) : PAD * 2);
+  const height = contentHeight + (warning ? 36 : 0);
+
+  const canvas = createCanvas();
+  canvas.width = Math.round(width * SCALE);
+  canvas.height = Math.round(height * SCALE);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('캔버스를 사용할 수 없는 브라우저입니다.');
+  ctx.scale(SCALE, SCALE);
+
+  ctx.fillStyle = COLOR.bg;
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = COLOR.line;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
+
+  if (multi) drawBatch(ctx, batch, meta, portraits, width);
+  else if (single) drawSingle(ctx, single, meta, portraits);
+  if (warning) text(ctx, warning, PAD, height - 14, 13, COLOR.amber, 700);
+
+  return canvas;
+}
+
+export const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> => new Promise((resolve, reject) => {
+  canvas.toBlob((blob) => {
+    if (blob) resolve(blob);
+    else reject(new Error('이미지를 만들지 못했습니다.'));
+  }, 'image/png');
+});
+
+/**
+ * PNG를 클립보드에 넣는다.
+ *
+ * 실패 사유를 구분해서 돌려준다. 아예 지원하지 않는 브라우저(주로 Firefox)와,
+ * 지원하지만 그 순간 거부된 경우(창에 포커스가 없거나 권한이 막힘)는 사용자가
+ * 할 일이 다르기 때문이다 — 전자는 저장뿐이고 후자는 다시 누르면 된다.
+ */
+export type CopyOutcome = 'copied' | 'unsupported' | 'blocked';
+
+export async function copyImage(blob: Blob): Promise<CopyOutcome> {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return 'unsupported';
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    return 'copied';
+  } catch {
+    return 'blocked';
+  }
+}
+
+export function downloadImage(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  // 즉시 회수하면 일부 브라우저에서 저장이 끊긴다.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export const reportFilename = (batch: BatchResult): string => {
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+  return `nikke-${batch.decks.length > 1 ? `${batch.decks.length}deck` : 'squad'}-${stamp}.png`;
+};

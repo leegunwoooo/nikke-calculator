@@ -1,0 +1,1271 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import {
+  buffTargetsVary, controlRuleNotes, hasOverloadLines, overloadLinesOf, overloadTotals, recommendedControlText,
+  renderCharacterSettings, withParticle,
+} from './character-settings';
+import type { BuffTargetRow, CharacterOverrides, SettingsCatalog } from './types';
+
+const settings: SettingsCatalog = {
+  characters: {
+    리타: {
+      weaponType: 'SMG',
+      recommendedControl: {},
+      hasConditionalControl: false,
+      growthStage: 3,
+      rarity: 'SSR',
+      maxGrowthStage: 10,
+      growthOptions: Array.from({ length: 11 }, (_, value) => ({
+        value,
+        label: value === 0 ? '명함' : value <= 3 ? `${value}돌` : `코강 ${value - 3}`,
+        affinity: value === 0 ? 10 : value === 1 ? 20 : 30,
+      })),
+      skillLevels: { '1': 10, '2': 10, '3': 10 },
+      skillLevelsLocked: false,
+      overload: {
+        element_bonus: 88.6,
+        atk_pct: 22.22,
+        max_ammo_pct: 129.64,
+        crit_rate: 0,
+        crit_dmg: 0,
+      },
+      cube: { name: '재장', level: 15 },
+      collection: { stage: 'SR15', favorite: 0 },
+    },
+    라피: {
+      weaponType: 'RL',
+      recommendedControl: { tap_fire: { rate: 3.6, release: 0.03 } },
+      hasConditionalControl: true,
+      favoriteItem: { name: '기념 열쇠고리', stage: 3 },
+      growthStage: 2,
+      rarity: 'SR',
+      maxGrowthStage: 2,
+      growthOptions: [
+        { value: 0, label: '명함', affinity: 10 },
+        { value: 1, label: '1돌', affinity: 20 },
+        { value: 2, label: '2돌', affinity: 30 },
+      ],
+      skillLevels: { '1': 10, '2': 10, '3': 10 },
+      skillLevelsLocked: false,
+      overload: {
+        element_bonus: 88.6,
+        atk_pct: 22.22,
+        max_ammo_pct: 129.64,
+        crit_rate: 0,
+        crit_dmg: 0,
+      },
+      cube: { name: '재장', level: 15 },
+      collection: { stage: 'SR15', favorite: 3 },
+    },
+    '아마기 유키코': {
+      weaponType: 'AR',
+      recommendedControl: {},
+      hasConditionalControl: false,
+      growthStage: 3,
+      rarity: 'SSR',
+      maxGrowthStage: 10,
+      growthOptions: Array.from({ length: 11 }, (_, value) => ({
+        value,
+        label: value === 0 ? '명함' : value <= 3 ? `${value}돌` : `코강 ${value - 3}`,
+        affinity: value === 0 ? 10 : value === 1 ? 20 : 30,
+      })),
+      skillLevels: { '1': 10, '2': 10, '3': 10 },
+      skillLevelsLocked: true,
+      overload: {
+        element_bonus: 88.6,
+        atk_pct: 22.22,
+        max_ammo_pct: 129.64,
+        crit_rate: 0,
+        crit_dmg: 0,
+      },
+      cube: { name: '재장', level: 15 },
+      collection: { stage: 'SR15', favorite: 0 },
+    },
+    '신데렐라 : 크리스탈 웨이브': {
+      weaponType: 'MG',
+      recommendedControl: {},
+      hasConditionalControl: false,
+      growthStage: 3,
+      rarity: 'SSR',
+      maxGrowthStage: 10,
+      growthOptions: Array.from({ length: 11 }, (_, value) => ({
+        value,
+        label: value === 0 ? '명함' : value <= 3 ? `${value}돌` : `코강 ${value - 3}`,
+        affinity: value === 0 ? 10 : value === 1 ? 20 : 30,
+      })),
+      skillLevels: { '1': 10, '2': 10, '3': 10 },
+      skillLevelsLocked: false,
+      overload: {
+        element_bonus: 88.6,
+        atk_pct: 22.22,
+        max_ammo_pct: 129.64,
+        crit_rate: 0,
+        crit_dmg: 0,
+      },
+      cube: { name: '재장', level: 15 },
+      collection: { stage: 'SR15', favorite: 0 },
+    },
+  },
+  collectionStages: ['없음', 'SR0', 'SR5', 'SR15'],
+  normalHitCoeff: { AR: 1, SMG: 1, SG: 0.9, MG: 1, SR: 1, RL: 1 },
+  weaponTypes: ['AR', 'SMG', 'SG', 'MG', 'SR', 'RL'],
+  buffTargetWatch: { 미란다: [{ buff: '웨이크업! 4', label: '크확 대상' }] },
+  consoleClasses: ['화력형', '방어형', '지원형'],
+  consoleCompanies: ['엘리시온', '미실리스', '테트라', '필그림', '어브노말'],
+  cubes: {
+    재장: { id: 0, label: '재장', stat: 'reload_speed_pct', template: '재장전 속도 {0} ▲%', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 29.69, commonElement: 19.09 } } },
+    탄충: { id: 0, label: '탄충', stat: 'ammo_charge_flat', template: '10발 사격 시 탄환 충전 {0}발 ▲', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 3, commonElement: 19.09 } } },
+    체력: { id: 0, label: '체력', stat: 'max_hp_pct', template: '최대 체력 {0} ▲%', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 9.69, commonElement: 19.09 } } },
+    차속: { id: 0, label: '차속', stat: 'charge_speed_pct', template: '차지 속도 {0} ▲%', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 2.12, commonElement: 19.09 } } },
+    파츠: { id: 0, label: '파츠', stat: 'part_dmg_pct', template: '파츠 대미지 {0} ▲%', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 31.9, commonElement: 19.09 } } },
+    분배: { id: 0, label: '분배', stat: 'split_dmg_pct', template: '분배 대미지 {0} ▲%', levels: { '15': { atk: 2780, def: 552, hp: 83400, effect: 17.69, commonElement: 19.09 } } },
+  },
+  overloadFields: {
+    element_bonus: { label: '우월 코드 대미지', unit: '%', min: 0, max: 1000 },
+    atk_pct: { label: '공격력', unit: '%', min: 0, max: 1000 },
+    max_ammo_pct: { label: '최대 장탄수', unit: '%', min: 0, max: 10000 },
+    crit_rate: { label: '크리티컬 확률', unit: '%', min: 0, max: 100 },
+    crit_dmg: { label: '크리티컬 대미지', unit: '%', min: 0, max: 1000 },
+    def_pct: { label: '방어력', unit: '%', min: 0, max: 1000 },
+    charge_speed_pct: { label: '차지 속도', unit: '%', min: 0, max: 1000 },
+    charge_dmg_pct: { label: '차지 대미지', unit: '%', min: 0, max: 1000 },
+    accuracy_pct: { label: '명중률', unit: '%', min: 0, max: 1000 },
+  },
+  manualStats: {
+    split_dmg_pct: { label: '분배 대미지', unit: '%', min: -1000, max: 10000 },
+    attack_speed_pct: { label: '공격 속도', unit: '%', min: -1000, max: 10000 },
+  },
+  favoriteItems: {},
+};
+
+describe('character settings editor', () => {
+  let root: HTMLElement;
+  let value: CharacterOverrides | undefined;
+  let characterName: '리타' | '라피' | '아마기 유키코' | '신데렐라 : 크리스탈 웨이브';
+
+  const render = () => renderCharacterSettings(root, characterName, settings, value, (next) => {
+    value = next;
+  });
+
+  const setToggle = (selector: string, checked: boolean) => {
+    const input = root.querySelector<HTMLInputElement>(selector)!;
+    input.checked = checked;
+    input.dispatchEvent(new Event('change'));
+  };
+
+  beforeEach(() => {
+    root = document.createElement('div');
+    document.body.append(root);
+    value = undefined;
+    characterName = '리타';
+    render();
+  });
+
+  afterEach(() => root.remove());
+
+  it('shows resolved defaults and opens final-value inputs on demand', () => {
+    expect(root.textContent).toContain('스킬 10 / 10 / 10');
+    expect(root.textContent).toContain('3돌 · 호감도 30');
+    expect(root.textContent).toContain('우코 88.60');
+    expect(root.textContent).toContain('공증 22.22');
+    expect(root.textContent).toContain('장탄 129.64');
+    expect(root.querySelector('[data-character-settings-body]')).toBeNull();
+
+    setToggle('[data-custom-toggle]', true);
+
+    expect(value?.skillLevels).toEqual({ '1': 10, '2': 10, '3': 10 });
+    expect(value?.growthStage).toBe(3);
+    expect(value?.overload).toEqual(settings.characters.리타!.overload);
+    expect(root.querySelector<HTMLInputElement>('[data-overload-key="atk_pct"]')?.value).toBe('22.22');
+  });
+
+  it('assigns priority-every-n burst usage and reveals the n input', () => {
+    setToggle('[data-custom-toggle]', true);
+
+    const burst = root.querySelector<HTMLSelectElement>('[data-burst-assignment]')!;
+    expect([...burst.options].map((option) => option.value))
+      .toEqual(['auto', 'priority', 'endgame', 'skip']);
+    expect(burst.value).toBe('auto');
+    expect(root.querySelector<HTMLElement>('.burst-every')?.hidden).toBe(true);
+
+    burst.value = 'priority';
+    burst.dispatchEvent(new Event('change'));
+    expect(value?.burst).toEqual({ mode: 'priority', every: 1 });
+    expect(root.querySelector<HTMLElement>('.burst-every')?.hidden).toBe(false);
+
+    const every = root.querySelector<HTMLInputElement>('[data-burst-every]')!;
+    every.value = '3';
+    every.dispatchEvent(new Event('input'));
+    expect(value?.burst).toEqual({ mode: 'priority', every: 3 });
+
+    const burstAgain = root.querySelector<HTMLSelectElement>('[data-burst-assignment]')!;
+    burstAgain.value = 'auto';
+    burstAgain.dispatchEvent(new Event('change'));
+    expect(value?.burst).toBeUndefined();
+  });
+
+  it('sets equipment level per part (head, body, arm, leg)', () => {
+    setToggle('[data-custom-toggle]', true);
+
+    const head = root.querySelector<HTMLSelectElement>('[data-equip-level="머리"]')!;
+    const arm = root.querySelector<HTMLSelectElement>('[data-equip-level="팔"]')!;
+    // 실전에서 쓰는 것만 남긴다 — 미장착 / 오버로드 0~5강.
+    // 강화 레벨은 스킬 레벨과 같은 방향(오름차순)으로 통일했다.
+    expect([...head.options].map((option) => option.value)).toEqual(
+      ['없음', '0', '1', '2', '3', '4', '5'],
+    );
+    expect([...head.options].map((option) => option.textContent)).toEqual(
+      ['미장착', '오버로드 0강', '오버로드 1강', '오버로드 2강',
+        '오버로드 3강', '오버로드 4강', '오버로드 5강'],
+    );
+    expect(head.value).toBe('5');
+    expect(root.querySelectorAll('[data-equip-level]').length).toBe(4);
+
+    arm.value = '2';
+    arm.dispatchEvent(new Event('change'));
+    expect(value?.equipLevels).toEqual({ 머리: 5, 몸통: 5, 팔: 2, 다리: 5 });
+
+    // 등급을 고르면 숫자가 아니라 등급 그대로 실린다 — 미장착을 강화0으로
+    // 적으면 안 낀 부위가 플랫 스탯을 얻는다.
+    arm.value = '없음';
+    arm.dispatchEvent(new Event('change'));
+    expect(value?.equipLevels?.팔).toBe('없음');
+
+    // 고를 수 있는 건 미장착과 오버로드 0~5강뿐이다 — 일반 T1~T9는 뺐고,
+    // 강화 0단계는 계산 그대로 「오버로드 0강」이라 적는다.
+    expect([...arm.options].map((option) => option.textContent)).toEqual([
+      '미장착', '오버로드 0강', '오버로드 1강', '오버로드 2강',
+      '오버로드 3강', '오버로드 4강', '오버로드 5강',
+    ]);
+  });
+
+  it('offers Crystal Wave sniper mode with a six-second default delay', () => {
+    characterName = '신데렐라 : 크리스탈 웨이브';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    const checkbox = root.querySelector<HTMLInputElement>('[data-weapon-mode-swap]')!;
+    const delay = root.querySelector<HTMLInputElement>('[data-weapon-mode-swap-at]')!;
+    expect(checkbox).not.toBeNull();
+    expect(checkbox.checked).toBe(false);
+    expect(delay.value).toBe('6');
+    expect(delay.disabled).toBe(true);
+    expect(delay.parentElement?.querySelector('em')?.textContent).toBe('초');
+    expect(delay.closest('.weapon-mode-swap')?.textContent).toContain('후부터 전환 시도');
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    expect(value?.weaponModeSwapAt).toBe(6);
+
+    const enabledDelay = root.querySelector<HTMLInputElement>('[data-weapon-mode-swap-at]')!;
+    expect(enabledDelay.disabled).toBe(false);
+    enabledDelay.focus();
+    enabledDelay.value = '8';
+    enabledDelay.dispatchEvent(new Event('input'));
+    expect(document.activeElement).toBe(enabledDelay);
+    enabledDelay.value = '8.5';
+    enabledDelay.dispatchEvent(new Event('input'));
+    expect(value?.weaponModeSwapAt).toBe(8.5);
+
+    setToggle('[data-weapon-mode-swap]', false);
+    expect(value?.weaponModeSwapAt).toBeUndefined();
+  });
+
+  it('does not show the sniper mode control for other characters', () => {
+    setToggle('[data-custom-toggle]', true);
+    expect(root.querySelector('[data-weapon-mode-swap]')).toBeNull();
+  });
+
+  it('selects a legal growth stage and applies its maximum bond rank', () => {
+    setToggle('[data-custom-toggle]', true);
+
+    const growth = root.querySelector<HTMLSelectElement>('[data-growth-stage]')!;
+    expect([...growth.options].map((option) => option.text)).toEqual([
+      '명함', '1돌', '2돌', '3돌', '코강 1', '코강 2', '코강 3', '코강 4',
+      '코강 5', '코강 6', '코강 7',
+    ]);
+    expect(root.textContent).toContain('호감도는 돌파별 최대치로 적용합니다.');
+
+    growth.value = '0';
+    growth.dispatchEvent(new Event('change'));
+
+    expect(value?.growthStage).toBe(0);
+    expect(root.textContent).toContain('명함 · 호감도 10');
+  });
+
+  it('constrains an SR character to card through limit break two', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    const growth = root.querySelector<HTMLSelectElement>('[data-growth-stage]')!;
+    expect([...growth.options].map((option) => option.text)).toEqual(['명함', '1돌', '2돌']);
+    expect(value?.growthStage).toBe(2);
+  });
+
+  it('changes skill 1, skill 2, and burst levels independently', () => {
+    setToggle('[data-custom-toggle]', true);
+
+    const skillOne = root.querySelector<HTMLSelectElement>('[data-skill-level="1"]')!;
+    skillOne.value = '4';
+    skillOne.dispatchEvent(new Event('change'));
+    const skillTwo = root.querySelector<HTMLSelectElement>('[data-skill-level="2"]')!;
+    skillTwo.value = '6';
+    skillTwo.dispatchEvent(new Event('change'));
+    const burst = root.querySelector<HTMLSelectElement>('[data-skill-level="3"]')!;
+    burst.value = '8';
+    burst.dispatchEvent(new Event('change'));
+
+    expect(value?.skillLevels).toEqual({ '1': 4, '2': 6, '3': 8 });
+    expect(root.textContent).toContain('스킬 4 / 6 / 8');
+  });
+
+  it('lets a favorite-item character pick the stage actually owned', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    expect(root.textContent).toContain('기념 열쇠고리');
+    const select = root.querySelector<HTMLSelectElement>('[data-collection]')!;
+    // 애장품 단계가 먼저 오고, 그 뒤로 소장품 단계가 이어진다.
+    expect([...select.options].slice(0, 3).map((option) => option.textContent))
+      .toEqual(['애장품 ★★★', '애장품 ★★☆', '애장품 ★☆☆']);
+    expect(select.value).toBe('favorite:3');
+
+    // 실제로는 애장품이 없고 소장품 SR5만 낀 경우.
+    select.value = 'stage:SR5';
+    select.dispatchEvent(new Event('change'));
+    expect(value?.collection).toEqual({ stage: 'SR5', favorite: 0 });
+
+    expect(root.querySelectorAll('[data-overload-key]')).toHaveLength(9);
+    expect(root.textContent).toContain('차지형 무기가 아니면 차지 옵션은 효과가 없습니다.');
+  });
+
+  it('offers only collection stages when the character has no favorite item', () => {
+    characterName = '리타';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    const select = root.querySelector<HTMLSelectElement>('[data-collection]')!;
+    expect([...select.options].every((option) => !option.value.startsWith('favorite:'))).toBe(true);
+
+    select.value = 'stage:없음';
+    select.dispatchEvent(new Event('change'));
+    expect(value?.collection).toEqual({ stage: '없음', favorite: 0 });
+  });
+
+  it('keeps 컨트롤 beside the stat settings, both closed, not one inside the other', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    const stats = root.querySelector<HTMLElement>('[data-char-panel-open="settings"]')!;
+    const control = root.querySelector<HTMLElement>('[data-control-open]')!;
+
+    // 둘 다 닫힌 채로 시작한다 — 개별 설정을 켜는 것과 여는 것은 별개다.
+    expect(stats.getAttribute('aria-expanded')).toBe('false');
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+
+    // 컨트롤은 수치 뭉치 **안**에 있으면 안 된다. 만지는 이유가 다른 두 뭉치다.
+    const statsPanel = stats.nextElementSibling!;
+    expect(statsPanel.contains(control)).toBe(false);
+    // 그리고 그 아래에 온다.
+    expect(statsPanel.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // 컨트롤은 창으로 가지 않고 그 자리에서 펴진다 — 수치 설정은 그대로 닫혀 있다.
+    control.click();
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector<HTMLElement>('[data-control-panel]')!.hidden).toBe(false);
+    expect(stats.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('추천 컨트롤을 영어 키가 아니라 한글로 적는다', () => {
+    // 「tap_fire」라고 적어 두면 아래 체크박스의 「톡톡이」와 같은 것인 줄 모른다.
+    expect(recommendedControlText(
+      { recommendedControl: { tap_fire: { rate: 3.6, release: 0.03 } }, hasConditionalControl: false },
+    )).toBe('현재 기본 추천: 톡톡이');
+    expect(recommendedControlText({ recommendedControl: {}, hasConditionalControl: false }))
+      .toBe('현재 기본 추천: 자동 사격');
+  });
+
+  it('조합으로 붙는 컨트롤을 누구 때문인지까지 적는다', () => {
+    // 아인은 에이다와 함께일 때 홀드가 붙는다. 예전에는 그 사실이 화면에 없어서
+    // 「홀드를 켰는데 결과가 그대로」로 보였다 — 이미 걸려 있었기 때문이다.
+    const defaults = {
+      recommendedControl: { tap_fire: { rate: 3.6, release: 0.03 } },
+      hasConditionalControl: true,
+      conditionalControl: [{ withMembers: ['에이다'], control: { hold: { policy: 'own_full_burst' as const, lead: 0.5 } } }],
+    };
+    expect(recommendedControlText(defaults, ['아인', '에이다', '미란다']))
+      .toBe('현재 기본 추천: 톡톡이 · 홀드 컨트롤(에이다와 함께라서)');
+    // 그 사람이 빠지면 다시 조건 없는 것만 남는다 — 얼버무리는 말도 붙지 않는다.
+    expect(recommendedControlText(defaults, ['아인', '홍련']))
+      .toBe('현재 기본 추천: 톡톡이');
+  });
+
+  it('화면이 판정할 수 없는 조건은 예전처럼 알리기만 한다', () => {
+    // 같은 단계·자리 번호를 보는 규칙은 내려오지 않는다. 흉내 내면 틀린 값을 적게 된다.
+    expect(recommendedControlText(
+      { recommendedControl: {}, hasConditionalControl: true }, ['아인'],
+    )).toBe('현재 기본 추천: 자동 사격 · 스쿼드 조합에 따라 추천 컨트롤이 추가됩니다.');
+  });
+
+  it('부위마다 세 줄을 늘 연다 — 강화 단계와 묶지 않는다', () => {
+    // 「강화는 아직인데 목표 옵션을 미리 재 보고 싶다」를 막지 않으려는 선택이다.
+    const lines = overloadLinesOf(undefined);
+    expect(Object.keys(lines)).toEqual(['머리', '몸통', '팔', '다리']);
+    for (const part of Object.values(lines)) {
+      expect(part).toHaveLength(3);
+      expect(part.every((line) => line.option === '')).toBe(true);
+    }
+    // 저장된 줄이 모자라도 자리는 셋으로 채운다.
+    const partial = overloadLinesOf({ 머리: [{ option: 'atk_pct', level: 7 }] });
+    expect(partial.머리).toEqual([
+      { option: 'atk_pct', level: 7 }, { option: '', level: 10 }, { option: '', level: 10 },
+    ]);
+  });
+
+  it('줄을 더해 옵션별 합계를 낸다 — 기본 스펙이 그대로 나온다', () => {
+    // 기본 스펙(우코 88.6 · 공증 22.22 · 장탄 129.64)은 정확히 Lv10 4줄·2줄·2줄이다.
+    const steps = {
+      element_bonus: [9.54, 10.94, 12.34, 13.75, 15.15, 16.55, 17.95, 19.35, 20.75, 22.15],
+      atk_pct: [4.77, 5.47, 6.18, 6.88, 7.59, 8.29, 9, 9.7, 10.4, 11.11],
+      max_ammo_pct: [27.84, 31.95, 36.06, 40.17, 44.28, 48.39, 52.5, 56.6, 60.71, 64.82],
+    };
+    const lines = overloadLinesOf({
+      머리: [{ option: 'element_bonus', level: 10 }, { option: 'atk_pct', level: 10 }, { option: 'max_ammo_pct', level: 10 }],
+      몸통: [{ option: 'element_bonus', level: 10 }, { option: 'atk_pct', level: 10 }, { option: 'max_ammo_pct', level: 10 }],
+      팔: [{ option: 'element_bonus', level: 10 }],
+      다리: [{ option: 'element_bonus', level: 10 }],
+    });
+    expect(overloadTotals(lines, steps)).toEqual({
+      element_bonus: 88.6, atk_pct: 22.22, max_ammo_pct: 129.64,
+    });
+  });
+
+  it('같은 부위에 같은 옵션을 두 줄 놓아도 그대로 더한다', () => {
+    // 규칙을 확신하지 못해 막지 않는다 — 막아야 한다면 그때 고른 옵션을 빼면 된다.
+    const steps = { atk_pct: [4.77, 5.47] };
+    const lines = overloadLinesOf({
+      머리: [{ option: 'atk_pct', level: 1 }, { option: 'atk_pct', level: 2 }],
+    });
+    expect(overloadTotals(lines, steps)).toEqual({ atk_pct: 10.24 });
+  });
+
+  it('줄이 하나도 없으면 손으로 적은 합계를 그대로 둔다', () => {
+    expect(hasOverloadLines(undefined)).toBe(false);
+    expect(hasOverloadLines({ 머리: [{ option: '', level: 10 }] })).toBe(false);
+    expect(hasOverloadLines({ 팔: [{ option: 'crit_dmg', level: 3 }] })).toBe(true);
+  });
+
+  it('조합으로 붙는 컨트롤은 왜 붙는지까지 적는다', () => {
+    // 아무도 켠 적이 없는데 걸리는 컨트롤이라, 걸린 사실만으로는 오해가 남는다.
+    const defaults = {
+      conditionalControl: [{
+        withMembers: ['에이다'],
+        control: { hold: { policy: 'own_full_burst' as const, lead: 0.5 } },
+        help: '에이다와 같은 운용을 함께 씁니다.',
+      }],
+    };
+    const [on] = controlRuleNotes(defaults, ['아인', '에이다']);
+    expect(on!.active).toBe(true);
+    expect(on!.headline).toBe('에이다와 함께라서 홀드 컨트롤이 걸려 있습니다.');
+    expect(on!.help).toBe('에이다와 같은 운용을 함께 씁니다.');
+
+    // 아직 아니면 «무엇과 함께 두면 걸리는지»를 알려 준다.
+    const [off] = controlRuleNotes(defaults, ['아인', '홍련']);
+    expect(off!.active).toBe(false);
+    expect(off!.headline).toBe('에이다와 함께 편성하면 홀드 컨트롤이 자동으로 붙습니다.');
+  });
+
+  it('조사를 받침에 맞춰 고른다', () => {
+    expect(withParticle('홀드 컨트롤', '이', '가')).toBe('홀드 컨트롤이');
+    expect(withParticle('톡톡이', '이', '가')).toBe('톡톡이가');
+    expect(withParticle('홍련', '과', '와')).toBe('홍련과');
+    expect(withParticle('에이다', '과', '와')).toBe('에이다와');
+    // 한글이 아닌 끝글자는 받침이 있는 쪽으로 본다.
+    expect(withParticle('MG', '이', '가')).toBe('MG이');
+  });
+
+  it('설명이 없는 규칙은 한 줄만 적는다', () => {
+    // 설명은 데이터가 들고 온다 — 화면이 지어내지 않는다.
+    const [note] = controlRuleNotes(
+      { conditionalControl: [{ withMembers: ['미란다'], control: { cover: { policy: 'own_full_burst' as const } } }] },
+      ['미하라 : 본딩 체인', '미란다'],
+    );
+    expect(note!.help).toBe('');
+    expect(note!.headline).toContain('버스트 엄폐 컨트롤');
+  });
+
+  it('규칙이 없으면 안내도 없다', () => {
+    expect(controlRuleNotes({}, ['리타'])).toEqual([]);
+  });
+
+  it('컨트롤 칩은 열지 않아도 지금 상태를 적어 둔다', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    const chipText = () => root.querySelector('.control-chip-text')!.textContent;
+    expect(chipText()).toBe('추천 자동 · 버스트 자동');
+
+    setToggle('[data-control-mode="manual"]', true);
+    expect(chipText()).toBe('직접 설정 · 버스트 자동');   // 0개라고 세어 보이지 않는다
+    setToggle('[data-control="reload"]', true);
+    expect(chipText()).toBe('직접 1개 · 버스트 자동');
+
+    const burst = root.querySelector<HTMLSelectElement>('[data-burst-assignment]')!;
+    burst.value = 'priority';
+    burst.dispatchEvent(new Event('change'));
+    expect(chipText()).toBe('직접 1개 · 버스트 1의 배수');
+
+    burst.value = 'skip';
+    burst.dispatchEvent(new Event('change'));
+    expect(chipText()).toBe('직접 1개 · 버스트 안 씀');
+  });
+
+  it('컨트롤 판 안의 긴 설명도 펴 둔 채로 남는다', () => {
+    // 접이판 상태를 카드가 비워진 뒤에 찾으면 늘 «접힘»만 나온다.
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    root.querySelector<HTMLButtonElement>('[data-control-open]')!.click();
+    const note = () => root.querySelector<HTMLDetailsElement>('[data-note-fold="burst"]')!;
+    expect(note().open).toBe(false);
+    note().open = true;
+    setToggle('[data-control-mode="manual"]', true);
+    expect(note().open).toBe(true);
+    // 다른 접이판까지 덩달아 펴지지는 않는다.
+    expect(root.querySelector<HTMLDetailsElement>('[data-note-fold="control-warning"]')!.open).toBe(false);
+  });
+
+  it('컨트롤을 펴 둔 채로 값을 바꿔도 접히지 않는다', () => {
+    // 체크 하나 누를 때마다 카드가 다시 그려진다 — 그때 접히면 둘째 항목을 못 켠다.
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    root.querySelector<HTMLButtonElement>('[data-control-open]')!.click();
+    setToggle('[data-control-mode="manual"]', true);
+    expect(root.querySelector<HTMLElement>('[data-control-open]')!.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector<HTMLElement>('[data-control-panel]')!.hidden).toBe(false);
+  });
+
+  it('switches from recommended controls to exact per-character controls', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+
+    expect(root.querySelector<HTMLInputElement>('[data-control-mode="auto"]')?.checked).toBe(true);
+    expect(root.querySelector('[data-control="tap_fire"]')).not.toBeNull();
+    expect(root.querySelector('[data-control="hold"]')).not.toBeNull();
+    expect(root.querySelector('[data-control="reload"]')).not.toBeNull();
+    expect(root.querySelector('[data-control="cover"]')).not.toBeNull();
+
+    setToggle('[data-control-mode="manual"]', true);
+    expect(value?.control).toEqual({});
+    setToggle('[data-control="tap_fire"]', true);
+    // 직접 켤 때 채워지는 출발값. 엔진의 «추천 자동»(3.6)과는 별개다.
+    expect(value?.control?.tap_fire).toEqual({ rate: 4.4, release: 0.03 });
+
+    setToggle('[data-control-mode="auto"]', true);
+    expect(value).not.toHaveProperty('control');
+  });
+
+  it('풀차징컨 — 켜면 딜레이 0.1초가 실리고, 딜레이를 고칠 수 있으며, 톡톡이와는 서로 끈다', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    setToggle('[data-control-mode="manual"]', true);
+    setToggle('[data-control="full_charge"]', true);
+    expect(value?.control?.full_charge).toEqual({ delay: 0.1 });
+    const delay = root.querySelector<HTMLInputElement>('[data-full-charge-delay]')!;
+    expect(delay.disabled).toBe(false);
+    delay.value = '0.25';
+    delay.dispatchEvent(new Event('input'));
+    expect(value?.control?.full_charge).toEqual({ delay: 0.25 });
+    // 톡톡이를 켜면 풀차징컨이 꺼진다.
+    setToggle('[data-control="tap_fire"]', true);
+    expect(value?.control?.tap_fire).toBeDefined();
+    expect(value?.control).not.toHaveProperty('full_charge');
+    // 풀차징컨을 다시 켜면 톡톡이가 꺼지고 딜레이는 기본값부터 다시 시작한다.
+    setToggle('[data-control="full_charge"]', true);
+    expect(value?.control).not.toHaveProperty('tap_fire');
+    expect(value?.control?.full_charge).toEqual({ delay: 0.1 });
+  });
+
+  it('톡톡이에 «버충 구간만» 정책이 있다 — 고르면 policy가 실리고, 발수를 고쳐도 남는다', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    setToggle('[data-control-mode="manual"]', true);
+    setToggle('[data-control="tap_fire"]', true);
+    const policy = root.querySelector<HTMLSelectElement>('[data-control-policy="tap_fire"]')!;
+    expect([...policy.options].map((option) => option.value)).toEqual(['always', 'burst_charge']);
+    expect(policy.value).toBe('always');
+    policy.value = 'burst_charge';
+    policy.dispatchEvent(new Event('change'));
+    expect(value?.control?.tap_fire).toEqual({ rate: 4.4, release: 0.03, policy: 'burst_charge' });
+    // 발수를 고쳐도 정책은 남는다.
+    const rate = root.querySelector<HTMLInputElement>('[data-tap-rate]')!;
+    rate.value = '3.8';
+    rate.dispatchEvent(new Event('input'));
+    expect(value?.control?.tap_fire).toEqual({ rate: 3.8, release: 0.03, policy: 'burst_charge' });
+    // 다시 «항상»으로 돌리면 policy 키가 사라진다.
+    const again = root.querySelector<HTMLSelectElement>('[data-control-policy="tap_fire"]')!;
+    again.value = 'always';
+    again.dispatchEvent(new Event('change'));
+    expect(value?.control?.tap_fire).toEqual({ rate: 3.8, release: 0.03 });
+  });
+
+  it('버충 구간만이면 «재장전 후 풀차지 1발»이 기본 켬이고, 끄면 false가 실린다', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    setToggle('[data-control-mode="manual"]', true);
+    setToggle('[data-control="tap_fire"]', true);
+    // 항상 톡톡이에서는 뜻이 없어 잠근다.
+    expect(root.querySelector<HTMLInputElement>('[data-tap-full-after-reload]')!.disabled).toBe(true);
+    const policy = root.querySelector<HTMLSelectElement>('[data-control-policy="tap_fire"]')!;
+    policy.value = 'burst_charge';
+    policy.dispatchEvent(new Event('change'));
+    const box = root.querySelector<HTMLInputElement>('[data-tap-full-after-reload]')!;
+    expect(box.disabled).toBe(false);
+    expect(box.checked).toBe(true);
+    // 기본(켬)은 값을 안 싣는다 — 엔진 기본과 같다.
+    expect(value?.control?.tap_fire).toEqual({ rate: 4.4, release: 0.03, policy: 'burst_charge' });
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+    expect(value?.control?.tap_fire).toEqual({ rate: 4.4, release: 0.03, policy: 'burst_charge', full_charge_after_reload: false });
+    const again = root.querySelector<HTMLInputElement>('[data-tap-full-after-reload]')!;
+    expect(again.checked).toBe(false);
+    again.checked = true;
+    again.dispatchEvent(new Event('change'));
+    expect(value?.control?.tap_fire).toEqual({ rate: 4.4, release: 0.03, policy: 'burst_charge' });
+  });
+
+  it('lets the tap-fire rate be typed in and shows the 톡톡이 equivalent', () => {
+    characterName = '라피';
+    render();
+    setToggle('[data-custom-toggle]', true);
+    setToggle('[data-control-mode="manual"]', true);
+
+    // 켜기 전에는 속도를 만질 수 없다.
+    expect(root.querySelector<HTMLInputElement>('[data-tap-rate]')?.disabled).toBe(true);
+    setToggle('[data-control="tap_fire"]', true);
+
+    const rate = root.querySelector<HTMLInputElement>('[data-tap-rate]')!;
+    expect(rate.disabled).toBe(false);
+    expect(rate.value).toBe('4.4');
+    expect(root.querySelector('[data-tap-hint]')?.textContent).toContain('44톡톡이');
+
+    rate.value = '4';
+    rate.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.control?.tap_fire).toEqual({ rate: 4, release: 0.03 });
+    expect(root.querySelector('[data-tap-hint]')?.textContent).toContain('40톡톡이');
+
+    // 게임이 강제하는 하한(220ms ≈ 4.5발/초)을 넘으면 그 사실을 알린다.
+    rate.value = '6';
+    rate.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.control?.tap_fire?.rate).toBe(6);
+    expect(root.querySelector('[data-tap-hint]')?.textContent).toContain('게임 하한');
+  });
+
+  it('does not show charge-only controls for a non-charge weapon', () => {
+    setToggle('[data-custom-toggle]', true);
+    expect(root.querySelector('[data-control="tap_fire"]')).toBeNull();
+    expect(root.querySelector('[data-control="hold"]')).toBeNull();
+    expect(root.querySelector('[data-control="reload"]')).not.toBeNull();
+    expect(root.querySelector('[data-control="cover"]')).not.toBeNull();
+  });
+
+  it('shows preview characters as level-ten-only without editable selects', () => {
+    characterName = '아마기 유키코';
+    render();
+
+    expect(root.textContent).toContain('수치 미공개 · Lv10 고정');
+    setToggle('[data-custom-toggle]', true);
+
+    expect(value?.skillLevels).toEqual({ '1': 10, '2': 10, '3': 10 });
+    expect(root.querySelectorAll('[data-skill-level]')).toHaveLength(0);
+    expect(root.querySelector('[data-skill-levels-locked]')?.textContent)
+      .toContain('수치 미공개 · Lv10 고정');
+    expect(root.textContent).toContain('1~9레벨 계수가 공개되지 않아');
+  });
+
+  it('오버로드작 잠금은 창으로 고른다 — 고르면 닫히고, Esc·바깥 누르기로도 닫힌다', () => {
+    const steps = Array.from({ length: 15 }, (_, at) => (at + 1) * 1.5);
+    const withSteps: SettingsCatalog = { ...settings, overloadSteps: { atk_pct: steps } };
+    const host = document.createElement('div');
+    document.body.append(host);
+    renderCharacterSettings(host, '리타', withSteps, {
+      overloadLines: { 머리: [{ option: 'atk_pct', level: 15 }, { option: '', level: 1 }, { option: '', level: 1 }] },
+    }, () => {});
+    host.querySelector<HTMLButtonElement>('[data-overload-sim]')!.click();
+    const modal = () => document.querySelector<HTMLElement>('[data-overload-lock-modal]');
+    expect(modal()).toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-overload-lock="머리:0"]')!.click();
+    expect(modal()!.textContent).toContain('머리 1번째 줄 잠금');
+    expect(modal()!.textContent).toContain('공격력 Lv15');
+    expect(modal()!.querySelectorAll('[data-overload-lock-as]').length).toBe(2);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(modal()).toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-overload-lock="머리:0"]')!.click();
+    modal()!.click();   // 바깥(배경)
+    expect(modal()).toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-overload-lock="머리:0"]')!.click();
+    modal()!.querySelector<HTMLButtonElement>('[data-overload-lock-as="module"]')!.click();
+    expect(modal()).toBeNull();
+    expect(host.querySelector('[data-overload-lock="머리:0"]')!.className).toContain('is-module');
+    // 잠긴 줄의 창에는 「잠금 해제」가 하나 더 있다.
+    host.querySelector<HTMLButtonElement>('[data-overload-lock="머리:0"]')!.click();
+    expect(modal()!.querySelectorAll('[data-overload-lock-as]').length).toBe(3);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    host.querySelector<HTMLButtonElement>('[data-overload-sim-end]')!.click();
+    host.remove();
+  });
+
+  it('오버로드작 시뮬레이션 — 잠근 줄은 그대로, 변경마다 재화가 쌓이고, 처음으로가 되돌린다', async () => {
+    const { setOverloadSimRng } = await import('./overload-sim');
+    let seed = 9;
+    setOverloadSimRng(() => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; });
+    // 부위 3줄 입력은 레벨별 값표(`overloadSteps`)가 있어야 그려진다.
+    const steps = Array.from({ length: 15 }, (_, at) => (at + 1) * 1.5);
+    const withSteps: SettingsCatalog = {
+      ...settings,
+      overloadFields: {
+        atk_pct: { label: '공격력', unit: '%', min: 0, max: 1000 },
+        crit_dmg: { label: '크리 대미지', unit: '%', min: 0, max: 1000 },
+        def_pct: { label: '방어력', unit: '%', min: 0, max: 1000 },
+      },
+      overloadSteps: { atk_pct: steps, crit_dmg: steps, def_pct: steps },
+    };
+    const host = document.createElement('div');
+    document.body.append(host);
+    let last: CharacterOverrides | null = null;
+    renderCharacterSettings(host, '리타', withSteps, {
+      overloadLines: { 머리: [{ option: 'atk_pct', level: 15 }, { option: 'crit_dmg', level: 9 }, { option: 'def_pct', level: 3 }] },
+    }, (next) => { last = next ?? null; });
+    const q = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
+    expect(host.querySelector('[data-overload-sim-bar]')).toBeNull();
+
+    q<HTMLButtonElement>('[data-overload-sim]').click();
+    expect(host.querySelector('[data-overload-sim-bar]')).not.toBeNull();
+    expect(q('[data-overload-sim-spent]').textContent).toContain('모듈 0');
+    // 자물쇠는 옵션이 있는 줄에만 산다 — 몸통은 비어 있어 잠글 수 없다.
+    expect(q<HTMLButtonElement>('[data-overload-lock="몸통:0"]').disabled).toBe(true);
+    // 머리 1번 줄을 모듈로, 3번 줄을 락키로 잠근다.
+    q<HTMLButtonElement>('[data-overload-lock="머리:0"]').click();
+    document.querySelector<HTMLButtonElement>('[data-overload-lock-modal] [data-overload-lock-as="module"]')!.click();
+    expect(q('[data-overload-lock="머리:0"]').className).toContain('is-module');
+    q<HTMLButtonElement>('[data-overload-lock="머리:2"]').click();
+    document.querySelector<HTMLButtonElement>('[data-overload-lock-modal] [data-overload-lock-as="key"]')!.click();
+    expect(q('[data-overload-lock="머리:2"]').className).toContain('is-key');
+    // 두 줄이 잠겼으니 세 번째는 못 잠근다.
+    expect(q<HTMLButtonElement>('[data-overload-lock="머리:1"]').disabled).toBe(true);
+    // 비용: 모듈 1 + 모듈 잠금 1 = 2, 락키는 두 번째 잠금이라 30.
+    expect(q('[data-overload-sim-effect="머리"]').textContent).toContain('모듈 2 · 락키 30');
+
+    q<HTMLButtonElement>('[data-overload-sim-effect="머리"]').click();
+    expect(last!.overloadLines!.머리![0]).toEqual({ option: 'atk_pct', level: 15 });
+    expect(last!.overloadLines!.머리![2]).toEqual({ option: 'def_pct', level: 3 });
+    const middle = last!.overloadLines!.머리![1]!;
+    if (middle.option) expect(['atk_pct', 'def_pct']).not.toContain(middle.option);
+    expect(q('[data-overload-sim-spent]').textContent).toContain('모듈 2 · 커스텀락키 30');
+    // 락키 잠금은 유지되고 또 든다.
+    q<HTMLButtonElement>('[data-overload-sim-value="머리"]').click();
+    expect(q('[data-overload-lock="머리:2"]').className).toContain('is-key');
+    expect(q('[data-overload-sim-spent]').textContent).toContain('모듈 4 · 커스텀락키 60');
+    // 처음으로 — 줄·잠금·소모가 시뮬레이션을 켤 때로 돌아간다.
+    q<HTMLButtonElement>('[data-overload-sim-reset]').click();
+    expect(last!.overloadLines!.머리).toEqual([
+      { option: 'atk_pct', level: 15 }, { option: 'crit_dmg', level: 9 }, { option: 'def_pct', level: 3 },
+    ]);
+    expect(q('[data-overload-sim-spent]').textContent).toContain('모듈 0 · 커스텀락키 0');
+    expect(q('[data-overload-lock="머리:0"]').className).not.toContain('is-module');
+    // 끝내기 — 자물쇠와 막대가 사라지고 줄은 남는다.
+    q<HTMLButtonElement>('[data-overload-sim-end]').click();
+    expect(host.querySelector('[data-overload-sim-bar]')).toBeNull();
+    expect(host.querySelector('[data-overload-lock]')).toBeNull();
+    expect(last!.overloadLines!.머리![0]).toEqual({ option: 'atk_pct', level: 15 });
+    host.remove();
+  });
+
+  it('updates cube type and renders its selected-level stats and effects', () => {
+    setToggle('[data-custom-toggle]', true);
+    const cube = root.querySelector<HTMLSelectElement>('[data-cube-name]')!;
+    cube.value = '탄충';
+    cube.dispatchEvent(new Event('change'));
+
+    expect(value?.cube).toEqual({ name: '탄충', level: 15 });
+    // 큐브는 수치 설정 창 밖, 카드의 「수치 설정」과 「컨트롤」 사이에 선다. 스탯 요약은
+    // 카드 폭을 안 잡아먹게 툴팁으로 낸다.
+    const field = root.querySelector<HTMLElement>('[data-cube-field]')!;
+    expect(field.previousElementSibling?.matches('[data-char-panel="settings"]')).toBe(true);
+    expect(field.nextElementSibling?.matches('.control-editor')).toBe(true);
+    expect(root.querySelector('[data-char-panel="settings"] [data-cube-name]')).toBeNull();
+    expect(field.title).toContain('공격 2,780');
+    expect(field.title).toContain('10발 사격 시 탄환 충전 3발 ▲');
+    expect(field.title).toContain('우월 코드 19.09%');
+  });
+
+  it('searches, adds, edits, deduplicates, and removes advanced stats', () => {
+    setToggle('[data-custom-toggle]', true);
+    setToggle('[data-advanced-toggle]', true);
+    const search = root.querySelector<HTMLInputElement>('[data-manual-search]')!;
+    search.value = '분배';
+    search.dispatchEvent(new Event('input'));
+    const select = root.querySelector<HTMLSelectElement>('[data-manual-select]')!;
+    expect([...select.options].map((option) => option.text)).toContain('분배 대미지');
+
+    select.value = 'split_dmg_pct';
+    root.querySelector<HTMLButtonElement>('[data-add-stat]')!.click();
+    expect(root.querySelectorAll('[data-manual-row]')).toHaveLength(1);
+    const input = root.querySelector<HTMLInputElement>('[data-manual-stat="split_dmg_pct"]')!;
+    input.value = '20';
+    input.dispatchEvent(new Event('input'));
+    expect(value?.manualStats).toEqual({ split_dmg_pct: 20 });
+
+    expect([...root.querySelectorAll<HTMLOptionElement>('[data-manual-select] option')]
+      .some((option) => option.value === 'split_dmg_pct')).toBe(false);
+    root.querySelector<HTMLButtonElement>('[data-remove-stat="split_dmg_pct"]')!.click();
+    expect(value?.manualStats).toEqual({});
+  });
+
+  it('disabling custom settings returns to canonical defaults', () => {
+    setToggle('[data-custom-toggle]', true);
+    root.querySelector<HTMLInputElement>('[data-overload-key="atk_pct"]')!.value = '40';
+    root.querySelector<HTMLInputElement>('[data-overload-key="atk_pct"]')!
+      .dispatchEvent(new Event('input'));
+    setToggle('[data-custom-toggle]', false);
+
+    expect(value).toBeUndefined();
+    expect(root.textContent).toContain('기본값');
+  });
+
+  it('shows who receives a watched buff, outside the collapsed 개별값 fold', () => {
+    // 대상이 공격력 순위로 갈려 편성만 보고는 알 수 없다 — 계산 전에는 빈 괄호로
+    // 자리만 잡고, 결과가 오면 실제 수령자가 채워진다.
+    renderCharacterSettings(root, characterName, settings, value, (next) => { value = next; },
+      [{ label: '크확 대상', buff: '웨이크업! 4', targets: [], count: 0 }]);
+    let row = root.querySelector<HTMLElement>('[data-buff-target]')!;
+    expect(row.textContent).toBe('크확 대상 : []');
+    // 접이 **밖**에 선다 — 펴 보지 않아도 보여야 하는 정보다.
+    expect(row.closest('[data-loadout-fold]')).toBeNull();
+    const fold = root.querySelector<HTMLElement>('[data-loadout-fold]')!;
+    expect(fold.hidden).toBe(true);                    // 접힌 채로도
+    expect(row.getClientRects).toBeDefined();
+    expect(fold.contains(row)).toBe(false);
+    // 접이 바로 다음 자리다 — 요약과 개별 설정 사이.
+    expect(fold.nextElementSibling!.contains(row)).toBe(true);
+
+    renderCharacterSettings(root, characterName, settings, value, (next) => { value = next; },
+      [{ label: '크확 대상', buff: '웨이크업! 4', targets: ['리버렐리오'], count: 3 }]);
+    row = root.querySelector<HTMLElement>('[data-buff-target]')!;
+    expect(row.textContent).toBe('크확 대상 : [리버렐리오]');
+    expect(row.title).toContain('3회 발동');
+  });
+
+  it('folds a switching target into 특이케이스 and offers the order', () => {
+    // 대상이 갈리면 이름을 나열해도 읽히지 않는다 — 접고 순서는 버튼으로 넘긴다.
+    let opened: BuffTargetRow | undefined;
+    const row: BuffTargetRow = {
+      label: '차분한 수심 대상', buff: '차분한 수심 4', count: 4,
+      targets: ['앨리스', '홍련 : 흑영'],
+      sequence: [
+        { t: 3.25, target: '앨리스' }, { t: 23.25, target: '홍련 : 흑영' },
+        { t: 43.25, target: '앨리스' }, { t: 63.25, target: '홍련 : 흑영' },
+      ],
+    };
+    renderCharacterSettings(root, characterName, settings, value, (next) => { value = next; },
+      [row], (r) => { opened = r; });
+
+    const box = root.querySelector<HTMLElement>('[data-buff-target]')!;
+    expect(box.textContent).toContain('[특이케이스]');
+    expect(box.title).toContain('2명 사이에서 갈립니다');
+
+    const button = root.querySelector<HTMLButtonElement>('[data-buff-order-open]')!;
+    expect(button.textContent).toBe('순서보기');
+    button.click();
+    expect(opened?.sequence?.map((s) => s.target))
+      .toEqual(['앨리스', '홍련 : 흑영', '앨리스', '홍련 : 흑영']);
+  });
+
+  it('shows just the name when the target never changes, with no order button', () => {
+    // 대상이 고정이면 이름 하나로 충분하다 — 「순서보기」는 갈릴 때만 붙인다.
+    renderCharacterSettings(root, characterName, settings, value, (next) => { value = next; },
+      [{ label: '크확 대상', buff: '웨이크업! 4', targets: ['리버렐리오'], count: 3,
+         sequence: [{ t: 3.25, target: '리버렐리오' }] }], () => {});
+    const box = root.querySelector<HTMLElement>('[data-buff-target]')!;
+    expect(box.textContent).toBe('크확 대상 : [리버렐리오]');
+    expect(root.querySelector('[data-buff-order-open]')).toBeNull();
+  });
+
+  it('says 계산중 while the background run is in flight', () => {
+    // 빈 괄호만 보이면 기능이 꺼진 것처럼 보인다 — 도는 동안은 그렇다고 적는다.
+    renderCharacterSettings(root, characterName, settings, value, (next) => { value = next; },
+      [{ label: '크확 대상', buff: '웨이크업! 4', targets: [], count: 0, pending: true }]);
+    const box = root.querySelector<HTMLElement>('[data-buff-target]')!;
+    expect(box.textContent).toBe('크확 대상 : [계산중]');
+    expect(box.classList.contains('is-pending')).toBe(true);
+    expect(box.title).toContain('계산하는 중');
+  });
+
+  it('hands the panel to whoever can show it in a window', () => {
+    // 창을 열 수 있는 자리(계산기 화면)에서는 그 자리에서 펼치지 않고 넘긴다.
+    const opened: Array<{ kind: string; label: string; hasBurst: boolean }> = [];
+    renderCharacterSettings(
+      root, characterName, settings, value, (next) => { value = next; }, undefined, undefined,
+      (kind, panel, label) => opened.push({
+        kind, label, hasBurst: panel.querySelector('.burst-editor') !== null,
+      }),
+    );
+    setToggle('[data-custom-toggle]', true);
+    root.querySelector<HTMLButtonElement>('[data-char-panel-open="settings"]')!.click();
+    expect(opened).toEqual([{ kind: 'settings', label: '돌파 · 스킬 · 오버로드', hasBurst: false }]);
+    // 넘겼으면 제자리에서 펼치지는 않는다 — 같은 것이 두 곳에 보이면 안 된다.
+    expect(root.querySelector<HTMLElement>('[data-char-panel="settings"]')!.hidden).toBe(true);
+    // 컨트롤은 애초에 창으로 넘기지 않는다 — 카드에서 그 자리에 펴진다.
+    root.querySelector<HTMLButtonElement>('[data-control-open]')!.click();
+    expect(opened).toHaveLength(1);
+    expect(root.querySelector<HTMLElement>('[data-control-panel]')!.hidden).toBe(false);
+  });
+
+  it('keeps advanced mode on while the panel lives in a window', () => {
+    // 창(모달)으로 띄우면 뭉치가 카드 밖으로 나간다. 그 상태로 «수치 추가»를 누르면
+    // 카드만 뒤져 펼침 상태를 찾던 탓에 고급 모드가 저 혼자 꺼졌다.
+    const window = document.createElement('div');
+    document.body.append(window);
+    const show = (_kind: string, panel: HTMLElement) => {
+      panel.hidden = false;
+      window.replaceChildren(panel);
+    };
+    const draw = () => renderCharacterSettings(
+      root, characterName, settings, value, (next) => {
+        value = next;
+        queueMicrotask(() => {
+          const fresh = root.querySelector<HTMLElement>('[data-char-panel="settings"]');
+          if (fresh) show('settings', fresh);
+        });
+      }, undefined, undefined, show,
+    );
+    draw();
+    setToggle('[data-custom-toggle]', true);
+    root.querySelector<HTMLButtonElement>('[data-char-panel-open="settings"]')!.click();
+
+    const toggle = window.querySelector<HTMLInputElement>('[data-advanced-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const search = window.querySelector<HTMLInputElement>('[data-manual-search]')!;
+    search.value = '분배';
+    search.dispatchEvent(new Event('input'));
+    window.querySelector<HTMLSelectElement>('[data-manual-select]')!.value = 'split_dmg_pct';
+    window.querySelector<HTMLButtonElement>('[data-add-stat]')!.click();
+
+    const drawn = root.querySelector<HTMLElement>('[data-char-panel="settings"]')!;
+    expect(drawn.querySelector<HTMLInputElement>('[data-advanced-toggle]')!.checked).toBe(true);
+    expect(drawn.querySelector<HTMLElement>('.advanced-editor')!.hidden).toBe(false);
+    expect(drawn.querySelectorAll('[data-manual-row]')).toHaveLength(1);
+    // 검색어도 남는다 — 둘째 줄부터 매번 다시 치게 만들지 않는다.
+    expect(drawn.querySelector<HTMLInputElement>('[data-manual-search]')!.value).toBe('분배');
+    window.remove();
+  });
+
+  it('folds the loadout summary away until it is asked for', () => {
+    render();
+    const fold = root.querySelector<HTMLElement>('[data-loadout-fold]')!;
+    const open = root.querySelector<HTMLButtonElement>('[data-loadout-open]')!;
+    expect(fold.hidden).toBe(true);
+    expect(root.querySelector('[data-loadout-summary]')!.textContent).toContain('스킬');
+
+    open.click();
+    expect(fold.hidden).toBe(false);
+    // 다시 그려도 펼친 채로 남는다 — 값 하나 바꿀 때마다 접히면 못 쓴다.
+    setToggle('[data-custom-toggle]', true);
+    expect(root.querySelector<HTMLElement>('[data-loadout-fold]')!.hidden).toBe(false);
+  });
+
+  it('names the skip option «안 씀» — it drops the burst, not just delays it', () => {
+    setToggle('[data-custom-toggle]', true);
+    const select = root.querySelector<HTMLSelectElement>('[data-burst-assignment]')!;
+    expect([...select.options].map((option) => option.textContent))
+      .toEqual(['자동', 'n의 배수 우선 사용', '막바지 최우선', '안 씀']);
+
+    select.value = 'skip';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(value?.burst).toEqual({ mode: 'skip' });
+    // 설명도 «가급적»이 아니라 아예 안 쓴다고 적는다.
+    expect(root.querySelector('.burst-editor .field-note')!.textContent)
+      .toContain('버스트를 아예 쓰지 않습니다');
+  });
+
+  it('carries an overload-0 setting through to the engine request', () => {
+    // «0강이 인식 안 된다»는 제보가 있었다 — 0은 흔히 falsy로 걸러지는 값이라
+    // 화면→저장→요청 어느 칸에서 새도 조용하다. 그 경로를 못 박는다.
+    value = { equipLevels: { 머리: 0, 몸통: 0, 팔: 0, 다리: 0 } };
+    render();
+    const head = root.querySelector<HTMLSelectElement>('[data-equip-level="머리"]')!;
+    expect(head.value).toBe('0');
+    // 계산기가 0강 아래를 구분하지 못한다는 사실을 화면에 적어 둔다.
+    expect(root.querySelector('.equip-editor .field-note')!.textContent)
+      .toContain('오버로드 0강 이하(T9 기업 포함)는 전부 오버로드 0강으로 계산합니다');
+
+    const arm = root.querySelector<HTMLSelectElement>('[data-equip-level="팔"]')!;
+    arm.value = '0';
+    arm.dispatchEvent(new Event('change'));
+    expect(value?.equipLevels).toEqual({ 머리: 0, 몸통: 0, 팔: 0, 다리: 0 });
+  });
+
+  it('keeps an older plain-tier setting selectable instead of silently moving it', () => {
+    // 목록에서 뺀 일반 등급이라도, 이미 그렇게 적혀 있거나 계정 가져오기가 넣었으면
+    // 그대로 남겨 둔다 — 조용히 오버로드로 바뀌면 없던 스탯이 생긴다.
+    value = { equipLevels: { 머리: 'T3', 몸통: 'T9', 팔: 5, 다리: 5 } };
+    render();
+    const head = root.querySelector<HTMLSelectElement>('[data-equip-level="머리"]')!;
+    expect(head.value).toBe('T3');
+    expect([...head.options].map((option) => option.textContent)).toContain('T3 (옛 설정)');
+    const body = root.querySelector<HTMLSelectElement>('[data-equip-level="몸통"]')!;
+    expect(body.value).toBe('T9');
+    expect([...body.options].map((option) => option.textContent)).toContain('T9 (옛 설정)');
+  });
+
+  it('큐브 드롭다운에도 별명이 붙는다 — 「렐릭 베어 큐브 (재장)」, 이름이 곧 별명이면 그대로', () => {
+    const withReal: SettingsCatalog = {
+      ...settings,
+      cubes: { ...settings.cubes, '렐릭 베어 큐브': { ...settings.cubes['재장']!, id: 1000303 } },
+    };
+    renderCharacterSettings(root, characterName, withReal, value, (next) => { value = next; });
+    setToggle('[data-custom-toggle]', true);
+    const texts = [...root.querySelector<HTMLSelectElement>('[data-cube-name]')!.options].map((option) => option.textContent);
+    expect(texts).toContain('렐릭 베어 큐브 (재장)');
+    expect(texts).toContain('재장');
+    // 값(value)은 정식 이름 그대로다 — 별명은 보여 주는 글일 뿐이다.
+    const values = [...root.querySelector<HTMLSelectElement>('[data-cube-name]')!.options].map((option) => option.value);
+    expect(values).toContain('렐릭 베어 큐브');
+  });
+
+  it('lets a character wear no cube at all', () => {
+    setToggle('[data-custom-toggle]', true);
+    const cube = root.querySelector<HTMLSelectElement>('[data-cube-name]')!;
+    expect([...cube.options][0]!.value).toBe('없음');
+
+    cube.value = '없음';
+    cube.dispatchEvent(new Event('change'));
+    // 레벨은 뜻이 없으므로 0으로 못 박고, 레벨 칸도 잠근다.
+    expect(value?.cube).toEqual({ name: '없음', level: 0 });
+    expect(root.querySelector<HTMLSelectElement>('[data-cube-level]')!.disabled).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-cube-field]')!.title).toContain('큐브를 끼지 않습니다');
+    expect(root.querySelector('[data-loadout-summary]')!.textContent).toContain('큐브 없음');
+
+    // 다시 큐브를 고르면 레벨이 되살아난다.
+    const first = root.querySelector<HTMLSelectElement>('[data-cube-name]')!.options[1]!.value;
+    const back = root.querySelector<HTMLSelectElement>('[data-cube-name]')!;
+    back.value = first;
+    back.dispatchEvent(new Event('change'));
+    expect(value?.cube).toEqual({ name: first, level: 15 });
+  });
+
+  it('offers an endgame-first burst window and sends it as seconds', () => {
+    setToggle('[data-custom-toggle]', true);
+    const select = root.querySelector<HTMLSelectElement>('[data-burst-assignment]')!;
+    expect([...select.options].map((option) => option.value))
+      .toEqual(['auto', 'priority', 'endgame', 'skip']);
+
+    const window = () => root.querySelector<HTMLInputElement>('[data-burst-last]')!;
+    // 고르기 전에는 칸이 숨어 있다.
+    expect(window().closest('label')!.hidden).toBe(true);
+
+    select.value = 'endgame';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(root.querySelector<HTMLInputElement>('[data-burst-last]')!.closest('label')!.hidden)
+      .toBe(false);
+    expect(value?.burst).toEqual({ mode: 'endgame', seconds: 20 });
+
+    const input = root.querySelector<HTMLInputElement>('[data-burst-last]')!;
+    input.value = '12';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.burst).toEqual({ mode: 'endgame', seconds: 12 });
+
+    // 비우거나 0을 넣으면 기본값으로 돌아가고, 상한을 넘으면 잘라 담는다 —
+    // 엔진이 거절하는 값을 보내지 않는다.
+    input.value = '0';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.burst).toEqual({ mode: 'endgame', seconds: 20 });
+    input.value = '500';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(value?.burst).toEqual({ mode: 'endgame', seconds: 180 });
+  });
+
+  it('omits the buff-target row for characters without a watched buff', () => {
+    render();
+    expect(root.querySelector('[data-buff-target]')).toBeNull();
+  });
+
+  it('keeps 버스트 운용 inside the 컨트롤 · 버스트 fold', () => {
+    setToggle('[data-custom-toggle]', true);
+    const fold = root.querySelector<HTMLElement>('[data-control-open]')!;
+    // 접이판 안에 있고, 본문(돌파·스킬·오버로드·큐브)에는 남아 있지 않다.
+    expect(fold.nextElementSibling!.querySelector('.burst-editor')).not.toBeNull();
+    expect(root.querySelector('.character-settings-body .burst-editor')).toBeNull();
+    expect(root.querySelector('[data-burst-assignment]')).not.toBeNull();
+  });
+
+  it('keeps numeric input focused while consecutive digits are entered', () => {
+    setToggle('[data-custom-toggle]', true);
+    const input = root.querySelector<HTMLInputElement>('[data-overload-key="atk_pct"]')!;
+    input.focus();
+    input.value = '4';
+    input.dispatchEvent(new Event('input'));
+
+    expect(root.contains(input)).toBe(true);
+    expect(document.activeElement).toBe(input);
+    input.value = '40';
+    input.dispatchEvent(new Event('input'));
+    expect(value?.overload?.atk_pct).toBe(40);
+  });
+});
+
+describe('육성 양 끝', () => {
+  // 개별 설정이 **켜져 있어야** 수치 판이 그려진다(`if (!value) return`).
+  const panel = (value: CharacterOverrides = {}) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    let last: CharacterOverrides | null = null;
+    renderCharacterSettings(host, '리타', settings, value, (next) => { last = next ?? null; });
+    return { host, got: () => last };
+  };
+
+  it('두 번 눌러야 적용된다 — 한 번은 되묻기다', () => {
+    const { host, got } = panel();
+    const button = host.querySelector<HTMLButtonElement>('[data-growth-extreme="max"]')!;
+    button.click();
+    expect(got()).toBeNull();
+    expect(button.textContent).toBe('정말 MAX로');
+    button.click();
+    expect(got()).not.toBeNull();
+  });
+
+  it('MAX는 돌파·스킬·장비·소장품·큐브를 끝까지 올린다', () => {
+    const { host, got } = panel();
+    const button = () => host.querySelector<HTMLButtonElement>('[data-growth-extreme="max"]')!;
+    button().click();
+    button().click();
+    const next = got()!;
+    expect(next.growthStage).toBe(settings.characters['리타']!.maxGrowthStage);
+    expect(next.skillLevels).toEqual({ 1: 10, 2: 10, 3: 10 });
+    expect(Object.values(next.equipLevels!)).toEqual([5, 5, 5, 5]);
+    expect(next.collection!.stage).toBe('SR15');
+    expect(next.cube!.level).toBeGreaterThan(0);
+  });
+
+  it('무육성은 아무것도 안 키운 상태로 두고 오버로드도 지운다', () => {
+    const { host, got } = panel();
+    const button = () => host.querySelector<HTMLButtonElement>('[data-growth-extreme="none"]')!;
+    button().click();
+    button().click();
+    const next = got()!;
+    expect(next.growthStage).toBe(0);
+    expect(next.skillLevels).toEqual({ 1: 1, 2: 1, 3: 1 });
+    expect(Object.values(next.equipLevels!)).toEqual(['없음', '없음', '없음', '없음']);
+    expect(next.collection).toEqual({ stage: '없음', favorite: 0 });
+    expect(next.cube!.name).toBe('없음');
+    expect(next.overload).toBeUndefined();
+    expect(next.overloadLines).toBeUndefined();
+  });
+
+  it('운용은 양 끝에서도 그대로 남는다 — 육성이 아니다', () => {
+    const { host, got } = panel({ control: { cover: { policy: 'own_full_burst' } } });
+    const button = () => host.querySelector<HTMLButtonElement>('[data-growth-extreme="max"]')!;
+    button().click();
+    button().click();
+    expect(got()!.control).toEqual({ cover: { policy: 'own_full_burst' } });
+  });
+});
+
+describe('부위 단위 오버로드 옮기기', () => {
+  // 부위 3줄 입력은 레벨별 값표(`overloadSteps`)가 있어야 그려진다.
+  const withSteps: SettingsCatalog = {
+    ...settings,
+    overloadSteps: { atk_pct: Array.from({ length: 15 }, (_, at) => (at + 1) * 1.5) },
+  };
+
+  it('한 부위를 복사해 다른 부위에 통째로 붙인다', () => {
+    // 네 부위에 같은 세 줄을 넣으려면 열두 번을 골라야 했다.
+    const host = document.createElement('div');
+    document.body.append(host);
+    let last: CharacterOverrides | null = null;
+    renderCharacterSettings(host, '리타', withSteps, {
+      overloadLines: { 머리: [{ option: 'atk_pct', level: 5 }] },
+    }, (next) => { last = next ?? null; });
+
+    const paste = () => host.querySelector<HTMLButtonElement>('[data-overload-part-paste="다리"]')!;
+    // 복사하기 전에는 붙일 것이 없다.
+    expect(paste().disabled).toBe(true);
+
+    host.querySelector<HTMLButtonElement>('[data-overload-part-copy="머리"]')!.click();
+    expect(paste().disabled).toBe(false);
+    paste().click();
+
+    const lines = last!.overloadLines!;
+    expect(lines['다리']![0]).toEqual(lines['머리']![0]);
+    expect(lines['다리']![0]!.option).toBe('atk_pct');
+    // 합계도 줄에서 다시 세어진다 — 붙였는데 계산이 안 따라가면 안 된다.
+    expect(last!.overload!.atk_pct).toBeGreaterThan(0);
+  });
+});
+
+describe.each(['길티 : 마이티 바니', '신 : 스위프트 바니'])('%s 바니 모드 특수 조작', (name) => {
+  const catalog: SettingsCatalog = { ...settings, characters: { ...settings.characters,
+    [name]: { ...settings.characters['리타']!, weaponType: 'SR', recommendedControl: { bunny_mode: 'engage' } },
+  } };
+  function setup(initial: CharacterOverrides = {}) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    let value = initial;
+    const render = () => renderCharacterSettings(host, name, catalog, value, next => { value = next ?? {}; render(); });
+    render();
+    return { host, value: () => value };
+  }
+  it('스탠스에서 인게이지를 선택하고 다른 설정 변경 후에도 유지한다', () => {
+    const { host, value } = setup({ control: { bunny_mode: 'stance' } });
+    expect(host.querySelector<HTMLInputElement>('[data-bunny-mode="stance"]')!.checked).toBe(true);
+    host.querySelector<HTMLInputElement>('[data-bunny-mode="engage"]')!.click();
+    expect(value().control?.bunny_mode).toBe('engage');
+    expect(host.querySelector<HTMLInputElement>('[data-bunny-mode="stance"]')!.checked).toBe(false);
+    host.querySelector<HTMLInputElement>('[data-control="cover"]')!.click();
+    expect(value().control).toEqual({ bunny_mode: 'engage', cover: { policy: 'own_full_burst' } });
+    host.querySelector<HTMLInputElement>('[data-bunny-mode="stance"]')!.click();
+    expect(value().control?.bunny_mode).toBe('stance');
+    expect(host.querySelector<HTMLInputElement>('[data-bunny-mode="engage"]')!.checked).toBe(false);
+  });
+  it('저장된 스탠스를 복원하고 추천 자동으로 돌아가면 인게이지가 된다', () => {
+    const { host, value } = setup({ control: { bunny_mode: 'stance' } });
+    expect(host.querySelector<HTMLInputElement>('[data-bunny-mode="stance"]')!.checked).toBe(true);
+    host.querySelector<HTMLInputElement>('[data-control-mode="auto"]')!.click();
+    expect(value().control).toBeUndefined();
+    expect(host.querySelector<HTMLInputElement>('[data-bunny-mode="engage"]')!.checked).toBe(true);
+  });
+  it('다른 캐릭터에는 표시하지 않는다', () => {
+    const host = document.createElement('div');
+    renderCharacterSettings(host, '리타', settings, {}, () => {});
+    expect(host.querySelector('[data-bunny-mode]')).toBeNull();
+  });
+});
+
+describe('버프 대상이 갈렸나', () => {
+  it('한 번에 둘이 받아도 발동마다 같은 묶음이면 갈리지 않았다 — 미란다 애장품 「파워 업!」', () => {
+    const row = { label: '파워 업! 대상', buff: '파워 업!', count: 4, targets: ['스노우 화이트 : 헤비암즈', '프리바티'],
+      sequence: [{ t: 2.87, target: '스노우 화이트 : 헤비암즈' }, { t: 2.87, target: '프리바티' },
+        { t: 15.4, target: '프리바티' }, { t: 15.4, target: '스노우 화이트 : 헤비암즈' }] };
+    expect(buffTargetsVary(row)).toBe(false);
+  });
+  it('발동마다 받은 사람이 바뀌면 갈렸다', () => {
+    const row = { label: 'x 대상', buff: 'x', count: 2, targets: ['A', 'B'],
+      sequence: [{ t: 1, target: 'A' }, { t: 2, target: 'B' }] };
+    expect(buffTargetsVary(row)).toBe(true);
+  });
+  it('발동 기록이 없는 예전 결과는 받은 사람이 둘 이상이면 갈린 것으로 본다', () => {
+    expect(buffTargetsVary({ label: 'x 대상', buff: 'x', count: 2, targets: ['A', 'B'] })).toBe(true);
+    expect(buffTargetsVary({ label: 'x 대상', buff: 'x', count: 2, targets: ['A'] })).toBe(false);
+  });
+});

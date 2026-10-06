@@ -1,0 +1,3906 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { StorageLike } from './cache';
+import { ANNOUNCEMENTS, COUNTDOWNS, countdownToShow } from './announcement';
+import fictionalCharacter from './fixtures/fictional-character.json';
+import { customToMeta, customToSettings } from './custom-nikke';
+import { LATEST_NOTICE_ID } from './notices';
+import { mountCalculator as mountCalculatorOnce, type CalculatorClientLike } from './ui';
+import { decodeBattleCode, encodeBattleCode, encodeShareCode } from './share-code';
+import './styles.css';
+import type {
+  CharacterMeta,
+  CombatPowerRequest,
+  SettingsCatalog,
+  SimulationRequest,
+  SimulationResult,
+} from './types';
+
+const names = ['리타', '크라운', '라피 : 레드 후드', '앨리스', '나가', '프리바티'];
+const catalog: CharacterMeta[] = [
+  { name: '리타', burstStage: '1', elementCode: '철갑', weaponType: 'SMG', className: '지원형', manufacturer: '미실리스', preview: false, image: 'characters/1.webp', nameCode: null, resourceId: null, aliases: [] },
+  { name: '크라운', burstStage: '2', elementCode: '철갑', weaponType: 'MG', className: '방어형', manufacturer: '필그림', preview: false, image: 'characters/2.webp', nameCode: null, resourceId: null, aliases: [] },
+  { name: '라피 : 레드 후드', burstStage: '3', elementCode: '작열', weaponType: 'MG', className: '화력형', manufacturer: '엘리시온', preview: false, image: 'characters/3.webp', nameCode: null, resourceId: null, aliases: [] },
+  { name: '앨리스', burstStage: '3', elementCode: '수냉', weaponType: 'SR', className: '화력형', manufacturer: '테트라', preview: false, image: 'characters/4.webp', nameCode: null, resourceId: null, aliases: [] },
+  { name: '나가', burstStage: '2', elementCode: '전격', weaponType: 'SG', className: '지원형', manufacturer: '미실리스', preview: false, image: 'characters/5.webp', nameCode: null, resourceId: null, aliases: [] },
+  { name: '프리바티', burstStage: '3', elementCode: '수냉', weaponType: 'AR', className: '화력형', manufacturer: '엘리시온', preview: false, image: 'characters/6.webp', nameCode: null, resourceId: null, aliases: [] },
+];
+
+const cubeLevels = { '15': { atk: 2780, def: 552, hp: 83400, effect: 10, commonElement: 19.09 } };
+const settings: SettingsCatalog = {
+  characters: Object.fromEntries(names.map((name) => [name, {
+    weaponType: catalog.find((character) => character.name === name)?.weaponType ?? 'AR',
+    recommendedControl: {},
+    hasConditionalControl: false,
+    growthStage: 3,
+    rarity: 'SSR',
+    maxGrowthStage: 10,
+    growthOptions: Array.from({ length: 11 }, (_, value) => ({
+      value,
+      label: value === 0 ? '명함' : value <= 3 ? `${value}돌` : `코강 ${value - 3}`,
+      affinity: value === 0 ? 10 : value === 1 ? 20 : 30,
+    })),
+    skillLevels: { '1': 10, '2': 10, '3': 10 },
+    skillLevelsLocked: false,
+    // 애장품은 일부만 가진다 — 필터가 실제로 가르는지 보려면 둘 다 있어야 한다.
+    ...(name === '리타' || name === '크라운'
+      ? { favoriteItem: { name: `${name}의 애장품`, stage: 3 as const } } : {}),
+    overload: {
+      element_bonus: 88.6,
+      atk_pct: 22.22,
+      max_ammo_pct: 129.64,
+      crit_rate: 0,
+      crit_dmg: 0,
+    },
+    cube: { name: '재장', level: 15 },
+    collection: { stage: 'SR15', favorite: 0 },
+  }])),
+  collectionStages: ['없음', 'SR0', 'SR5', 'SR15'],
+  normalHitCoeff: { AR: 1, SMG: 1, SG: 0.9, MG: 1, SR: 1, RL: 1 },
+  weaponTypes: ['AR', 'SMG', 'SG', 'MG', 'SR', 'RL'],
+  optimalRangeWeapons: ['AR', 'SMG', 'SG', 'MG', 'SR'],
+  buffTargetWatch: { 리타: [{ buff: '웨이크업! 4', label: '크확 대상' }] },
+  consoleClasses: ['화력형', '방어형', '지원형'],
+  consoleCompanies: ['엘리시온', '테트라', '미실리스', '필그림', '어브노말'],
+  cubes: {
+    재장: { id: 0, label: '재장', stat: 'reload_speed_pct', template: '재장전 {0}%', levels: cubeLevels },
+    탄충: { id: 0, label: '탄충', stat: 'ammo_charge_flat', template: '10발마다 {0}발', levels: cubeLevels },
+    체력: { id: 0, label: '체력', stat: 'max_hp_pct', template: '체력 {0}%', levels: cubeLevels },
+    차속: { id: 0, label: '차속', stat: 'charge_speed_pct', template: '차속 {0}%', levels: cubeLevels },
+    파츠: { id: 0, label: '파츠', stat: 'part_dmg_pct', template: '파츠 {0}%', levels: cubeLevels },
+    분배: { id: 0, label: '분배', stat: 'split_dmg_pct', template: '분배 {0}%', levels: cubeLevels },
+  },
+  overloadFields: {
+    element_bonus: { label: '우월 코드 대미지', unit: '%', min: 0, max: 1000 },
+    atk_pct: { label: '공격력', unit: '%', min: 0, max: 1000 },
+    max_ammo_pct: { label: '최대 장탄수', unit: '%', min: 0, max: 10000 },
+    crit_rate: { label: '크리티컬 확률', unit: '%', min: 0, max: 100 },
+    crit_dmg: { label: '크리티컬 대미지', unit: '%', min: 0, max: 1000 },
+    def_pct: { label: '방어력', unit: '%', min: 0, max: 1000 },
+    charge_speed_pct: { label: '차지 속도', unit: '%', min: 0, max: 1000 },
+    charge_dmg_pct: { label: '차지 대미지', unit: '%', min: 0, max: 1000 },
+    accuracy_pct: { label: '명중률', unit: '%', min: 0, max: 1000 },
+  },
+  manualStats: {
+    split_dmg_pct: { label: '분배 대미지', unit: '%', min: -1000, max: 10000 },
+  },
+  favoriteItems: {},
+};
+
+const calculated: SimulationResult = {
+  squadTotal: 123_456,
+  duration: 10,
+  hitCount: 87,
+  charTotals: {
+    리타: 60_000,
+    크라운: 30_000,
+    '라피 : 레드 후드': 20_000,
+    앨리스: 10_000,
+    나가: 3_456,
+  },
+  previewNote: '',
+  deviations: '기본 스펙(1층) 그대로',
+};
+
+class FakeClient implements CalculatorClientLike {
+  prepareCalls = 0;
+  simulateCalls = 0;
+  lastRequest: SimulationRequest | null = null;
+  requests: SimulationRequest[] = [];
+
+  async prepare(): Promise<void> {
+    this.prepareCalls += 1;
+  }
+
+  async simulate(request: SimulationRequest): Promise<SimulationResult> {
+    this.simulateCalls += 1;
+    this.lastRequest = request;
+    this.requests.push(request);
+    return calculated;
+  }
+
+  dispose(): void {}
+}
+
+/**
+ * 계산을 붙잡아 두는 대역. 취소 단추를 눌러 볼 수 있게 «아직 안 끝난 계산»을 만든다.
+ * 실제 풀처럼 `cancel()`이 돌던 요청을 «취소»로 끊는다.
+ */
+class HangingClient implements CalculatorClientLike {
+  prepareCalls = 0;
+  simulateCalls = 0;
+  private rejectAll: Array<(error: Error) => void> = [];
+
+  async prepare(): Promise<void> {
+    this.prepareCalls += 1;
+  }
+
+  simulate(): Promise<SimulationResult> {
+    this.simulateCalls += 1;
+    return new Promise<SimulationResult>((_resolve, reject) => { this.rejectAll.push(reject); });
+  }
+
+  cancel(): void {
+    const waiting = this.rejectAll;
+    this.rejectAll = [];
+    for (const reject of waiting) {
+      const error = new Error('계산을 취소했습니다.');
+      error.name = 'CalculationCancelled';
+      reject(error);
+    }
+  }
+
+  dispose(): void {}
+}
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/**
+ * 시험용 초읽기 한 줄을 세운다. `COUNTDOWNS`는 평소 **비어 있다**(셈할 것이 생길 때만
+ * 한 줄을 넣는 자리다) — 시계 자체가 도는지 보려면 쓰는 쪽이 세워야 한다.
+ * 세운 뒤에는 반드시 `COUNTDOWNS.length = 0`으로 걷는다.
+ */
+function seedCountdown() {
+  const entry = { target: '2026-12-31T23:59:59+09:00', label: '아무개까지 남은 시간' };
+  COUNTDOWNS.length = 0;
+  COUNTDOWNS.push(entry);
+  return entry;
+}
+
+/** 판의 검색칸에 친다. 슬롯마다 있던 검색은 없어지고 덱에 하나만 남았다. */
+function searchRoster(root: HTMLElement, query: string): void {
+  const search = root.querySelector<HTMLInputElement>('[data-roster-search]')!;
+  search.value = query;
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** 판에 지금 보이는 니케 이름을 순서대로. */
+function rosterNames(root: HTMLElement): string[] {
+  return [...root.querySelectorAll<HTMLButtonElement>('[data-roster-cell]')]
+    .map((cell) => cell.dataset.rosterCell!);
+}
+
+function focusSlot(root: HTMLElement, index: number): void {
+  root.querySelector<HTMLButtonElement>(`[data-slot-choose="${index}"]`)!.click();
+}
+
+/** 칸을 겨냥하고 판에서 골라 넣는다 — 실제 사용 흐름 그대로다. */
+function chooseCharacter(root: HTMLElement, index: number, name: string): void {
+  focusSlot(root, index);
+  searchRoster(root, name);
+  const cell = root.querySelector<HTMLButtonElement>(`[data-roster-cell="${name}"]`)!;
+  expect(cell.disabled).toBe(false);
+  cell.click();
+  searchRoster(root, '');
+}
+
+function clearCharacterSlot(root: HTMLElement, index: number): void {
+  const card = root.querySelectorAll<HTMLElement>('[data-slot-card]')[index]!;
+  card.querySelector<HTMLButtonElement>('.slot-clear')!.click();
+}
+
+/**
+ * 테스트마다 붙인 계산기를 끝에 떼어 낸다. 떼지 않으면 window에 건 리스너·타이머가 화면 통째를 붙잡아
+ * 테스트마다 수십 MB씩 쌓이고, 이 파일 하나가 힙 한도(4GB)를 넘겨 워커가 죽는다.
+ */
+const mounted: Array<() => void> = [];
+const mountCalculator = (...args: Parameters<typeof mountCalculatorOnce>): ReturnType<typeof mountCalculatorOnce> => {
+  const dispose = mountCalculatorOnce(...args);
+  mounted.push(dispose);
+  return dispose;
+};
+afterEach(() => {
+  for (const dispose of mounted.splice(0)) {
+    try { dispose(); } catch { /* 테스트가 이미 뗐다 */ }
+  }
+});
+
+describe('calculator UI', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    history.replaceState(null, '', location.pathname);
+    root = document.createElement('main');
+    document.body.append(root);
+    localStorage.clear();
+  });
+
+  it('restores imported console levels without changing battle conditions',()=>{
+    const levels={common_level:123,class_level:Object.fromEntries(settings.consoleClasses.map(key=>[key,45])),company_level:Object.fromEntries(settings.consoleCompanies.map(key=>[key,67]))};
+    localStorage.setItem('nikke-imported-console-v1',JSON.stringify(levels));
+    const dispose=mountCalculator(root,{catalog,settings,version:'v1',client:new FakeClient(),storage:localStorage});
+    const common=root.querySelector<HTMLInputElement>('#console-common')!;common.value='999';common.dispatchEvent(new Event('change',{bubbles:true}));
+    root.querySelector<HTMLButtonElement>('[data-console-restore]')!.click();
+    expect(common.value).toBe('123');
+    expect([...root.querySelectorAll<HTMLInputElement>('[data-console-bucket]')].map(input=>Number(input.value))).toEqual([67,67,67,67,67,45,45,45]);
+    expect(JSON.parse(localStorage.getItem('nikke-imported-console-v1')!)).toEqual(levels);
+    dispose();
+  });
+  it('opens utility URLs directly and syncs clicks and history without resetting the squad', () => {
+    history.replaceState(null, '', '#/utilities/skills');
+    const dispose = mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLElement>('[data-view="fun"]')!.hidden).toBe(false);
+    expect(root.querySelector('[data-fun-tab="skills"]')?.getAttribute('aria-selected')).toBe('true');
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="mcp"]')!.click();
+    expect(location.hash).toBe('#/utilities/mcp');
+    root.querySelector<HTMLButtonElement>('[data-view-tab="links"]')!.click();
+    expect(location.hash).toBe('#/links');
+    history.replaceState(null, '', '#/utilities/overload');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(root.querySelector('[data-fun-tab="lab"]')?.getAttribute('aria-selected')).toBe('true');
+    history.replaceState(null, '', '#/not-a-tab');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(location.hash).toBe('#/calculator');
+    expect(root.querySelector<HTMLElement>('[data-view="calc"]')!.hidden).toBe(false);
+    dispose();
+  });
+
+  it('preserves bundled temporary settings when a same-name local character exists', () => {
+    const testCatalog = structuredClone(catalog);
+    const testSettings = structuredClone(settings);
+    const custom = fictionalCharacter;
+    testCatalog.push(customToMeta(custom));
+    testSettings.characters[custom.name] = { ...customToSettings(custom), skillLevelsLocked: true };
+    const bundledCharacters = { [custom.name]: { nikke: custom.nikke, skills: custom.skills } };
+    const stored = JSON.stringify({ [custom.name]: custom });
+    localStorage.setItem('nikke-custom-v1', stored);
+    mountCalculator(root, { catalog: testCatalog, settings: testSettings, bundledCharacters,
+      version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(testSettings.characters[custom.name]!.skillLevelsLocked).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-add-nikke]')!.click();
+    expect(root.querySelector('[data-custom-list]')!.textContent).not.toContain(custom.name);
+    root.querySelector<HTMLTextAreaElement>('[data-custom-json]')!.value = JSON.stringify(custom);
+    root.querySelector<HTMLButtonElement>('[data-custom-submit]')!.click();
+    expect(root.querySelector('[data-custom-msg]')!.textContent).toContain('기본 목록에 등록된 임시 캐릭터');
+    expect(testSettings.characters[custom.name]!.skillLevelsLocked).toBe(true);
+    expect(localStorage.getItem('nikke-custom-v1')).toBe(stored);
+  });
+
+  it('opens info independently of selection and saves skill changes only to the active deck', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); } });
+    const testCatalog = structuredClone(catalog);
+    testCatalog[0]!.info = { skills: [{ key: '1', name: '레벨 확인', template: '공격력 {0}%', values: { '1': ['10'], '10': ['50'] } }] };
+    testCatalog[5]!.info = { skills: [{ key: '1', name: '보유 레벨', template: '보유 {0}', values: { '1': ['10'], '10': ['50'] } }], favorite: { name: '시험 애장품', skills: [{ key: '1', stage: 1, name: '애장품 스킬', template: '강화 {0}', values: { '1': ['20'], '10': ['100'] } }] } };
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({ '프리바티': { skillLevels: { '1': 1, '2': 1, '3': 1 }, collection: { stage: 'SR15', favorite: 0 } } }));
+    const client = new FakeClient();
+    mountCalculator(root, { catalog: testCatalog, settings, version: 'v1', client, storage: localStorage });
+    await flush();
+    const cell = root.querySelector<HTMLButtonElement>('[data-roster-cell="리타"]')!;
+    const before = [...root.querySelectorAll('[data-slot-card]')].map(node => node.textContent);
+    const info = cell.parentElement!.querySelector<HTMLButtonElement>('[data-character-info]')!;
+    expect(info.closest('button.roster-cell')).toBeNull();
+    info.click();
+    expect(root.querySelector('dialog')!.textContent).toContain('레벨 확인');
+    expect([...root.querySelectorAll('[data-slot-card]')].map(node => node.textContent)).toEqual(before);
+    const select = root.querySelector<HTMLSelectElement>('[data-info-skill="1"]')!;
+    select.value = '1'; select.dispatchEvent(new Event('change'));
+    expect(root.querySelector('dialog')!.textContent).toContain('공격력 10%');
+    root.querySelector<HTMLButtonElement>('dialog button')!.click();
+    root.querySelector<HTMLButtonElement>('[data-slot-card] [data-character-info="리타"]')!.click();
+    expect(root.querySelector<HTMLSelectElement>('[data-info-skill="1"]')!.value).toBe('1');
+    root.querySelector<HTMLButtonElement>('dialog button')!.click();
+    root.querySelector<HTMLButtonElement>('.calculate-button.run-inline')!.click();
+    await flush(); await flush();
+    expect(client.lastRequest?.characters?.['리타']?.skillLevels?.['1']).toBe(1);
+    const savedRoster = localStorage.getItem('nikke-roster-v1');
+    root.querySelector<HTMLButtonElement>('.roster-entry [data-character-info="프리바티"]')!.click();
+    expect(root.querySelector<HTMLSelectElement>('[data-info-skill="1"]')!.value).toBe('1');
+    expect(root.querySelector('dialog')!.textContent).toContain('애장품 미적용');
+    const preview = root.querySelector<HTMLSelectElement>('[data-info-skill="1"]')!;
+    preview.value = '10'; preview.dispatchEvent(new Event('change'));
+    expect(localStorage.getItem('nikke-roster-v1')).toBe(savedRoster);
+    root.querySelector<HTMLButtonElement>('dialog button')!.click();
+  });
+
+  /** jsdom에는 DragEvent가 없다 — 필요한 부분(dataTransfer)만 흉내 낸다. */
+  const dragEvent = (type: string, data: Record<string, string>) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    const store = new Map(Object.entries(data));
+    Object.defineProperty(event, 'dataTransfer', {
+      value: {
+        types: [...store.keys()],
+        getData: (key: string) => store.get(key) ?? '',
+        setData: (key: string, value: string) => { store.set(key, value); },
+        dropEffect: 'none',
+        effectAllowed: 'none',
+      },
+    });
+    return event;
+  };
+
+  /** 저장된 편성. 시험 카탈로그는 처음부터 다섯 칸이 차 있다. */
+  const savedSquad = () => (JSON.parse(localStorage.getItem('nikke-state-v1')!) as
+    { decks: Array<{ squad: string[] }> }).decks[0]!.squad;
+
+  it('니케를 끌어다 칸에 놓는다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const cell = root.querySelector<HTMLButtonElement>('[data-roster-cell="프리바티"]')!;
+    expect(cell.draggable).toBe(true);
+
+    // 4번 칸에 놓는다 — 고른 칸(activeSlot)이 아니라 **놓은 칸**에 들어가야 한다.
+    const slot = root.querySelector<HTMLElement>('[data-slot-card="3"]')!;
+    cell.dispatchEvent(dragEvent('dragstart', {}));
+    slot.dispatchEvent(dragEvent('dragover', { 'application/x-nikke-name': '프리바티' }));
+    expect(slot.classList.contains('is-drop')).toBe(true);
+    slot.dispatchEvent(dragEvent('drop', { 'application/x-nikke-name': '프리바티' }));
+
+    expect(savedSquad()[3]).toBe('프리바티');
+    // 다시 그린 칸에는 끌던 표시가 남지 않는다.
+    expect(root.querySelector<HTMLElement>('[data-slot-card="3"]')!.classList.contains('is-drop'))
+      .toBe(false);
+  });
+
+  it('이미 그 덱에 있는 니케는 놓아도 안 들어가고 이유를 말한다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLElement>('[data-slot-card="4"]')!
+      .dispatchEvent(dragEvent('drop', { 'application/x-nikke-name': '프리바티' }));
+    const taken = savedSquad()[1]!;          // 2번 칸의 니케
+
+    root.querySelector<HTMLElement>('[data-slot-card="4"]')!
+      .dispatchEvent(dragEvent('drop', { 'application/x-nikke-name': taken }));
+
+    expect(savedSquad()[4]).toBe('프리바티');   // 그대로다
+    expect(root.querySelector('[data-errors]')!.textContent).toContain('이미 2번 칸에 있습니다');
+  });
+
+  it('칸끼리 끌면 자리가 맞바뀐다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLElement>('[data-slot-card="4"]')!
+      .dispatchEvent(dragEvent('drop', { 'application/x-nikke-name': '프리바티' }));
+    const before = savedSquad().slice(0, 3);
+
+    // 1번을 3번 칸으로 끌어다 놓는다 — 이름에 걸린 설정은 그대로 두고 자리만 바뀐다.
+    root.querySelector<HTMLElement>('[data-slot-card="2"]')!
+      .dispatchEvent(dragEvent('drop', { 'application/x-nikke-slot': '0' }));
+
+    expect(savedSquad().slice(0, 3)).toEqual([before[2], before[1], before[0]]);
+  });
+
+  it('exposes composition-only presets as a first-class squad action', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    // 프리셋과 공유는 같은 창이다 — 단추도 하나로 합쳤다.
+    const open = root.querySelector<HTMLButtonElement>('[data-share-open]')!;
+    expect(open).not.toBeNull();
+    expect(open.textContent).toContain('프리셋');
+    expect(open.textContent).toContain('조합 공유');
+    expect(root.querySelector('[data-preset-open]')).toBeNull();
+    open.click();
+
+    const modal = root.querySelector<HTMLElement>('[data-share-modal]')!;
+    expect(modal.hidden).toBe(false);
+    // 창 하나가 저장(프리셋)과 주고받기(코드·링크)를 같이 맡는다.
+    expect(root.querySelector('[data-preset-name]')).not.toBeNull();
+    expect(root.querySelector('[data-share-out]')).not.toBeNull();
+    expect(modal.textContent).toContain('개인 스펙과 전투 조건은 담기지 않습니다');
+
+    const name = root.querySelector<HTMLInputElement>('[data-preset-name]')!;
+    name.value = '솔레 1군';
+    root.querySelector<HTMLButtonElement>('[data-preset-save]')!.click();
+    const stored = JSON.parse(localStorage.getItem('nikke-presets-v1')!) as Array<Record<string, unknown>>;
+    expect(stored).toHaveLength(1);
+    expect(Object.keys(stored[0]!).sort()).toEqual(['at', 'code', 'name']);
+    expect(stored[0]?.name).toBe('솔레 1군');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    root.remove();
+  });
+
+  /** 불러온 프로필과 그 출처를 심어 둔다. */
+  const seedLoadedRoster = (source: 'blabla' | 'csv') => {
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      리타: { growthStage: 7, overload: { atk_pct: 20 } },
+    }));
+    localStorage.setItem('nikke-roster-source-v1', source);
+  };
+
+  const openSettings = () => {
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    // 불러온 프로필이 있으면 개별 설정이 이미 켜져 있다 — 그때 누르면 도로 꺼진다.
+    const toggle = card.querySelector<HTMLInputElement>('[data-custom-toggle]')!;
+    if (!toggle.checked) toggle.click();
+    return root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+  };
+
+  it('수치 설정 안에 불러온 값으로 되돌리는 단추가 출처 이름으로 선다', () => {
+    seedLoadedRoster('blabla');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    openSettings();
+
+    // 진단: 판이 어디 있고 무엇이 들었나
+    // eslint-disable-next-line no-console
+    const button = root.querySelector<HTMLButtonElement>('[data-restore-loaded]')!;
+    expect(button).not.toBeNull();
+    expect(button.textContent).toContain('블라블라링크');
+    // 흐리게 두지 않는다 — 수치 입력은 판을 다시 그리지 않아 꺼진 채로 남는다.
+    expect(button.disabled).toBe(false);
+  });
+
+  it('CSV로 불러왔으면 그 이름으로 적는다', () => {
+    seedLoadedRoster('csv');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    openSettings();
+    expect(root.querySelector('[data-restore-loaded]')!.textContent).toContain('렛츠도로 CSV');
+  });
+
+  it('두 번 눌러야 되돌아간다 — 한 번은 되묻기다', () => {
+    seedLoadedRoster('blabla');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    openSettings();
+
+    // 손으로 값을 만진다.
+    const state = () => JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].characters['리타'];
+    const skill = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skill.value = '3';
+    skill.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(state().skillLevels['1']).toBe(3);
+
+    const button = () => root.querySelector<HTMLButtonElement>('[data-restore-loaded]')!;
+
+    // 첫 번째는 되묻기 — 아직 안 바뀐다.
+    button().click();
+    expect(button().textContent).toBe('정말 되돌립니다');
+    expect(state().skillLevels['1']).toBe(3);
+
+    // 두 번째에 되돌아간다 — 불러온 값 그대로다.
+    button().click();
+    expect(state().growthStage).toBe(7);
+    expect(state().overload.atk_pct).toBe(20);
+    expect(state().skillLevels).toBeUndefined();
+  });
+
+  it('불러온 프로필이 없으면 단추를 아예 내지 않는다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    openSettings();
+    expect(root.querySelector('[data-restore-loaded]')).toBeNull();
+  });
+
+  it('편성 카드에도 되돌리기가 선다 — 「덱 전원에게」 바로 옆이다', () => {
+    // 넷을 덮어쓴 **직후**가 물리고 싶어지는 자리인데, 그전에는 수치 설정을 펴야만
+    // 되돌릴 수 있었다(피드백 2026-09-05).
+    seedLoadedRoster('blabla');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    const button = card.querySelector<HTMLButtonElement>('[data-restore-one="리타"]')!;
+    expect(button).not.toBeNull();
+    expect(button.textContent).toContain('블라블라링크');
+    // 덮어쓰는 단추와 같은 카드 안에 있어야 «바로 옆»이다.
+    expect(card.querySelector('[data-spread-growth="리타"]')).not.toBeNull();
+  });
+
+  it('덱·5덱 되돌리기는 운용을 남긴다 — 컨트롤까지 날리면 못 되돌린다', () => {
+    seedLoadedRoster('blabla');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const state = () => JSON.parse(localStorage.getItem('nikke-state-v1')!)
+      .decks[0].characters['리타'];
+    // 손으로 육성을 만지고, 운용(컨트롤)도 잡아 둔다.
+    const skill = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skill.value = '3';
+    skill.dispatchEvent(new Event('change', { bubbles: true }));
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!);
+    saved.decks[0].characters['리타'].control = { reloadCancel: true };
+    localStorage.setItem('nikke-state-v1', JSON.stringify(saved));
+
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    expect(state().skillLevels['1']).toBe(3);
+
+    const deckRestore = root.querySelector<HTMLButtonElement>('[data-deck-restore]')!;
+    expect(deckRestore.hidden).toBe(false);
+    deckRestore.click();                       // 되묻기
+    expect(state().skillLevels['1']).toBe(3);
+    deckRestore.click();                       // 적용
+    expect(state().growthStage).toBe(7);
+    expect(state().skillLevels).toBeUndefined();
+    // 운용은 그대로 남는다 — 계정에서 불러오는 값이 아니라 조합마다 짜는 값이다.
+    expect(state().control).toEqual({ reloadCancel: true });
+  });
+
+  it('불러온 값이 없으면 덱 되돌리기 단추를 감춘다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    expect(root.querySelector<HTMLButtonElement>('[data-deck-restore]')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[data-deck-restore-all]')!.hidden).toBe(true);
+  });
+
+  it('베껴오기가 오버로드 줄까지 가져온다 — 합계만 옮기면 드롭다운이 안 따라온다', () => {
+    // 크라운에게 부위별 줄과 합계를 함께 잡아 둔다.
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      크라운: {
+        overload: { atk_pct: 12.5, element_bonus: 8.4 },
+        overloadLines: { 머리: [{ option: 'atk_pct', level: 5 }] },
+      },
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card.querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    const pick = card.querySelector<HTMLSelectElement>('[data-copy-from-pick]')!;
+    pick.value = '크라운';
+    card.querySelector<HTMLButtonElement>('[data-copy-from-apply]')!.click();
+
+    const target = JSON.parse(localStorage.getItem('nikke-state-v1')!)
+      .decks[0].characters[card.dataset.slotCard === '0' ? '리타' : ''] ?? {};
+    // 합계는 예전에도 옮겨졌다.
+    expect(target.overload?.atk_pct).toBe(12.5);
+    // 줄이 함께 오지 않으면 드롭다운은 빈 채로 남고, 한 줄만 고쳐도 합계가 날아간다.
+    expect(target.overloadLines?.머리?.[0]).toEqual({ option: 'atk_pct', level: 5 });
+  });
+
+  it('줄이 없는 원본에서 베끼면 받는 쪽의 낡은 줄을 지운다', () => {
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      크라운: {
+        overload: { atk_pct: 12.5 },
+        overloadLines: { 머리: [{ option: 'atk_pct', level: 5 }] },
+      },
+      // 합계만 있고 줄은 없는 원본(옛 저장본·손으로 적은 값).
+      앨리스: { overload: { atk_pct: 30 } },
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = () => root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card().querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    const copyFrom = (who: string) => {
+      card().querySelector<HTMLSelectElement>('[data-copy-from-pick]')!.value = who;
+      card().querySelector<HTMLButtonElement>('[data-copy-from-apply]')!.click();
+    };
+    const target = () =>
+      JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].characters['리타'];
+
+    // 먼저 줄이 있는 원본에서 베껴 받는 쪽에 줄을 심는다.
+    copyFrom('크라운');
+    expect(target().overloadLines?.머리?.[0]).toEqual({ option: 'atk_pct', level: 5 });
+
+    // 줄이 없는 원본에서 다시 베끼면 낡은 줄이 남으면 안 된다 — 남으면 드롭다운이
+    // 원본과 다른 것을 보이고, 한 줄만 고쳐도 합계가 그 줄에서 다시 세어져 뒤집힌다.
+    copyFrom('앨리스');
+    expect(target().overload.atk_pct).toBe(30);
+    expect(target().overloadLines).toBeUndefined();
+  });
+
+  it('베껴오기는 돌파를 두고 온다 — 켜야만 함께 온다', () => {
+    // 장비·스킬은 「이만큼 키운 니케」를 옮기는 것이지만 돌파는 뽑기로 정해지는 값이라
+    // 남의 것이 따라올 까닭이 없다 (피드백 2026-09-10).
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      크라운: { growthStage: 9, overload: { atk_pct: 12.5 } },
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = () => root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card().querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    const copy = () => {
+      card().querySelector<HTMLSelectElement>('[data-copy-from-pick]')!.value = '크라운';
+      card().querySelector<HTMLButtonElement>('[data-copy-from-apply]')!.click();
+    };
+    const target = () =>
+      JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].characters['리타'];
+
+    copy();
+    expect(target().overload.atk_pct).toBe(12.5);
+    // 제 돌파(기본 3돌)를 그대로 지킨다 — 크라운의 9가 넘어오지 않는다.
+    expect(target().growthStage).toBe(3);
+
+    card().querySelector<HTMLInputElement>('[data-copy-growth]')!.click();
+    copy();
+    expect(target().growthStage).toBe(9);
+  });
+
+  it('베껴오기 후보를 초성으로 좁힌다', () => {
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      크라운: { overload: { atk_pct: 1 } },
+      앨리스: { overload: { atk_pct: 2 } },
+      나가: { overload: { atk_pct: 3 } },
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card.querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    const pick = () => [...card.querySelectorAll<HTMLOptionElement>('[data-copy-from-pick] option')]
+      .map((option) => option.value);
+    expect(pick()).toEqual(['나가', '앨리스', '크라운']);
+
+    const search = card.querySelector<HTMLInputElement>('[data-copy-from-search]')!;
+    search.value = 'ㅋㄹㅇ';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(pick()).toEqual(['크라운']);
+
+    search.value = '';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(pick()).toHaveLength(3);
+  });
+
+  it('「다른 덱에도」를 켜면 같은 니케가 선 덱마다 함께 바뀐다', () => {
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      크라운: { overload: { atk_pct: 12.5 } },
+    }));
+    // 1덱과 2덱 모두 리타를 세워 둔다.
+    localStorage.setItem('nikke-state-v1', JSON.stringify({
+      decks: [
+        { id: 1, squad: ['리타', '', '', '', ''], characters: {} },
+        { id: 2, squad: ['리타', '앨리스', '', '', ''], characters: {} },
+        { id: 3, squad: ['', '', '', '', ''], characters: {} },
+        { id: 4, squad: ['', '', '', '', ''], characters: {} },
+        { id: 5, squad: ['', '', '', '', ''], characters: {} },
+      ],
+      fiveDeckMode: true,
+      activeDeckId: 1,
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card.querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    card.querySelector<HTMLInputElement>('[data-copy-all-decks]')!.click();
+    card.querySelector<HTMLSelectElement>('[data-copy-from-pick]')!.value = '크라운';
+    card.querySelector<HTMLButtonElement>('[data-copy-from-apply]')!.click();
+
+    const decks = JSON.parse(localStorage.getItem('nikke-state-v1')!).decks;
+    expect(decks[0].characters['리타'].overload.atk_pct).toBe(12.5);
+    expect(decks[1].characters['리타'].overload.atk_pct).toBe(12.5);
+    // 리타가 없는 덱은 건드리지 않는다.
+    expect(decks[2].characters['리타']).toBeUndefined();
+  });
+
+  it('덱 이름 연필은 덱 단추 칸 안에 들어간다 — 줄을 넘기지 않는다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLInputElement>('#squad-mode')!.click();
+
+    const tabs = root.querySelector<HTMLElement>('[data-deck-tabs]')!;
+    // 기본 두 덱의 칸만 있어야 한다. 연필이 별도 격자 칸을 만들면 안 된다.
+    expect(tabs.children).toHaveLength(2);
+
+    const rename = root.querySelector<HTMLButtonElement>('[data-deck-rename]')!;
+    expect(rename).not.toBeNull();
+    // 연필은 보고 있는 덱 단추와 **같은 칸** 안에 있다.
+    const cell = rename.parentElement!;
+    expect(cell.classList.contains('deck-tab')).toBe(true);
+    expect(cell.querySelector('[data-deck-tab]')?.getAttribute('data-deck-tab'))
+      .toBe(rename.dataset.deckRename);
+    // 글자가 연필 밑으로 들어가지 않게 자리를 비워 둔다.
+    expect(cell.querySelector('[data-deck-tab]')!.classList.contains('has-rename')).toBe(true);
+  });
+
+  it('연필은 보고 있는 덱에만 하나 붙는다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLInputElement>('#squad-mode')!.click();
+    expect(root.querySelectorAll('[data-deck-rename]')).toHaveLength(1);
+
+    // 다른 덱으로 옮기면 연필도 따라간다.
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-deck-tab]')];
+    tabs[1]!.click();
+    const rename = root.querySelectorAll<HTMLButtonElement>('[data-deck-rename]');
+    expect(rename).toHaveLength(1);
+    expect(rename[0]!.dataset.deckRename).toBe('2');
+    expect(root.querySelector('[data-deck-tabs]')!.children).toHaveLength(2);
+  });
+
+  /** 오버로드 옵션이 잡힌 로스터를 심는다 — 시각화는 이 값이 있어야 그린다. */
+  const seedVisionRoster = () => {
+    localStorage.setItem('nikke-roster-v1', JSON.stringify({
+      리타: { overload: { element_bonus: 12.5 } },
+      크라운: { overload: { element_bonus: 8.4 } },
+      앨리스: { overload: { element_bonus: 3.1 } },
+    }));
+  };
+
+  const openVision = () => {
+    root.querySelector<HTMLButtonElement>('[data-view-tab="fun"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="vision"]')!.click();
+  };
+
+  it('accepts an unequipped cube and preserves it after reloading saved settings', async () => {
+    const client = new FakeClient();
+    const dispose = mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    openSettings();
+    const cube = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-cube-name]')!;
+    cube.value = '없음'; cube.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.characters?.리타?.cube).toEqual({ name: '없음', level: 0 });
+    dispose(); root.replaceChildren();
+    const reloaded = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v2', client: reloaded, storage: localStorage });
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(reloaded.lastRequest?.characters?.리타?.cube).toEqual({ name: '없음', level: 0 });
+  });
+
+  it('keeps the overload lab inside utilities and preserves its mounted controls across tabs', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector('[data-view-tab="lab"]')).toBeNull();
+    const panel = root.querySelector<HTMLElement>('[data-overload-lab]')!;
+    expect(panel.closest('[data-view="fun"]')).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('[data-view-tab="fun"]')!.click();
+    expect(panel.hidden).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="lab"]')!.click();
+    expect(panel.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-fun-body]')!.hidden).toBe(true);
+    const control = panel.querySelector('input, select, button');
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="skills"]')!.click();
+    expect(panel.hidden).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="lab"]')!.click();
+    expect(panel.querySelector('input, select, button')).toBe(control);
+    expect(panel.hidden).toBe(false);
+  });
+
+  it('오버옵 시각화는 동그라미를 모아 붙이지 않은 채로 열린다', () => {
+    seedVisionRoster();
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    openVision();
+
+    const toggle = root.querySelector<HTMLInputElement>('[data-vision-pack]')!;
+    expect(toggle).not.toBeNull();
+    // 환공포증 이야기가 있던 배치다 — 첫 화면부터 맞을 이유가 없다.
+    expect(toggle.checked).toBe(false);
+    expect(root.querySelector('[data-vision-grid]')).not.toBeNull();
+    expect(root.querySelector('[data-vision-bubbles]')).toBeNull();
+  });
+
+  it('토글을 켜면 원형 팩으로 그리고, 그 선택이 브라우저에 남는다', () => {
+    seedVisionRoster();
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    openVision();
+    root.querySelector<HTMLInputElement>('[data-vision-pack]')!.click();
+
+    expect(root.querySelector('[data-vision-bubbles]')).not.toBeNull();
+    expect(root.querySelector('[data-vision-grid]')).toBeNull();
+    expect(localStorage.getItem('nikke-vision-pack')).toBe('1');
+
+    // 다시 열어도 켜 둔 채로 온다.
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    openVision();
+    expect(root.querySelector<HTMLInputElement>('[data-vision-pack]')!.checked).toBe(true);
+    expect(root.querySelector('[data-vision-bubbles]')).not.toBeNull();
+  });
+
+  it('두 모습 다 같은 사람을 같은 순서로 보인다 — 모양만 다르다', () => {
+    seedVisionRoster();
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    openVision();
+    const gridNames = [...root.querySelectorAll<HTMLElement>('[data-vision-grid] [data-vision-cell]')]
+      .map((cell) => cell.dataset.visionCell);
+
+    root.querySelector<HTMLInputElement>('[data-vision-pack]')!.click();
+    const packNames = [...root.querySelectorAll<SVGElement>('[data-vision-bubbles] [data-vision-cell]')]
+      .map((cell) => (cell as unknown as HTMLElement).dataset.visionCell);
+
+    expect(gridNames).toEqual(['리타', '크라운', '앨리스']);
+    expect(packNames).toEqual(gridNames);
+  });
+
+  it('버스트 순서를 단축키로 걸어 덱에 남긴다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+    const modal = root.querySelector<HTMLElement>('[data-burst-order-modal]')!;
+    expect(modal.hidden).toBe(false);
+
+    // 첫 걸음은 1번째 풀버스트의 1버다.
+    const now = root.querySelector<HTMLElement>('[data-burst-now]')!;
+    expect(now.textContent).toContain('1번째 풀버스트');
+    expect(now.textContent).toContain('1버');
+
+    // 1버는 리타 하나뿐이라 A와 「자동」(0)만 붙는다.
+    const keysOf = () => [...root.querySelectorAll<HTMLElement>('[data-burst-picks] .burst-pick-key')]
+      .map((node) => node.textContent);
+    expect(keysOf()).toEqual(['A', '0']);
+
+    const firstName = root.querySelector<HTMLElement>('[data-burst-picks] .burst-pick-name')!
+      .textContent!;
+    expect(firstName).toBe('리타');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    // 한 칸 골랐으니 다음 걸음(2버)으로 넘어간다.
+    expect(now.textContent).toContain('2버');
+    // 2버는 둘이라 A·S가 편성 순서대로 붙는다.
+    expect(keysOf()).toEqual(['A', 'S', '0']);
+    expect([...root.querySelectorAll<HTMLElement>('[data-burst-picks] .burst-pick-name')]
+      .map((node) => node.textContent).slice(0, 2)).toEqual(['크라운', '나가']);
+    expect(root.querySelector('[data-burst-progress]')?.textContent).toContain('1 /');
+
+    root.querySelector<HTMLButtonElement>('[data-burst-order-save]')!.click();
+    expect(modal.hidden).toBe(true);
+
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!) as
+      { decks: Array<{ burstSequence?: Array<Record<string, string[]>> }> };
+    expect(saved.decks[0]!.burstSequence![0]!['1']).toEqual([firstName]);
+    // 덱 도구 줄의 배지가 걸려 있음을 알린다.
+    expect(root.querySelector<HTMLElement>('[data-burst-order-badge]')!.hidden).toBe(false);
+  });
+
+  it('목록은 사이클마다 빈 칸 셋이고 고를 때마다 초상화가 채워진다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+
+    const firstRow = () => root.querySelector<HTMLElement>('[data-burst-list] .burst-row')!;
+    const slots = () => [...firstRow().querySelectorAll<HTMLElement>('.burst-slot')];
+
+    // 아무것도 안 골라도 칸은 셋이다 — 몇 칸이 남았는지가 보여야 한다.
+    expect(slots()).toHaveLength(3);
+    expect(slots().map((slot) => slot.querySelector('.burst-slot-stage')?.textContent))
+      .toEqual(['1버', '2버', '3버']);
+    expect(slots().every((slot) => !slot.classList.contains('is-filled'))).toBe(true);
+    expect(firstRow().querySelectorAll('img')).toHaveLength(0);
+
+    // 첫 칸을 고르면 그 칸만 채워지고 초상화가 들어간다.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(slots()[0]!.classList.contains('is-filled')).toBe(true);
+    expect(slots()[1]!.classList.contains('is-filled')).toBe(false);
+    expect(slots()[0]!.querySelector('img')?.getAttribute('alt')).toBe('리타');
+  });
+
+  it('목록의 칸을 누르면 그 걸음으로 바로 간다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+    const now = root.querySelector<HTMLElement>('[data-burst-now]')!;
+
+    const rows = [...root.querySelectorAll<HTMLElement>('[data-burst-list] .burst-row')];
+    // 3번째 사이클의 3버 칸.
+    rows[2]!.querySelectorAll<HTMLButtonElement>('.burst-slot')[2]!.click();
+
+    expect(now.textContent).toContain('3번째 풀버스트');
+    expect(now.textContent).toContain('3버');
+    // 지금 서 있는 칸에 표시가 붙는다.
+    const here = root.querySelectorAll('[data-burst-list] .burst-slot.is-here');
+    expect(here).toHaveLength(1);
+  });
+
+  it('버스트 순서 단추는 덱 비우기와 다른 옷을 입고, 걸어 두면 색이 바뀐다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    const open = root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!;
+    // 파괴 단추(덱 비우기)와 같은 옷을 입고 있어 눈에 안 띄던 것을 뗐다.
+    expect(open.classList.contains('deck-clear')).toBe(false);
+    expect(open.classList.contains('burst-order-open')).toBe(true);
+    expect(open.classList.contains('is-on')).toBe(false);
+
+    open.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    root.querySelector<HTMLButtonElement>('[data-burst-order-save]')!.click();
+    expect(open.classList.contains('is-on')).toBe(true);
+  });
+
+  it('← 로 한 칸 되돌리고 0으로 자동으로 되돌린다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+    const now = root.querySelector<HTMLElement>('[data-burst-now]')!;
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(now.textContent).toContain('2버');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(now.textContent).toContain('1버');
+    expect(now.textContent).not.toContain('→ 자동');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(now.textContent).toContain('→ 자동');
+  });
+
+  it('순서를 지우면 덱에서 사라지고 배지도 내려간다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    root.querySelector<HTMLButtonElement>('[data-burst-order-save]')!.click();
+
+    root.querySelector<HTMLButtonElement>('[data-burst-order-open]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-burst-order-clear]')!.click();
+
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!) as
+      { decks: Array<{ burstSequence?: unknown }> };
+    expect(saved.decks[0]!.burstSequence).toBeUndefined();
+    expect(root.querySelector<HTMLElement>('[data-burst-order-badge]')!.hidden).toBe(true);
+  });
+
+  it('창이 닫혀 있으면 단축키를 가져가지 않는다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    // 창을 열지 않은 채 A를 눌러도 아무 일이 없어야 한다 — 검색칸과 부딪치면 안 된다.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1') ?? '{"decks":[{}]}') as
+      { decks: Array<{ burstSequence?: unknown }> };
+    expect(saved.decks[0]!.burstSequence).toBeUndefined();
+  });
+
+  it('keeps battle results scoped to the calculator view across tab changes', () => {
+    mountCalculator(root,{catalog,settings,version:'v1',client:new FakeClient(),storage:localStorage});
+    const panel=root.querySelector<HTMLElement>('[data-result-panel]')!;
+    expect(panel.closest('form[data-view="calc"]')).not.toBeNull();
+    for(const view of ['links','fun','enikk']){
+      root.querySelector<HTMLButtonElement>(`[data-view-tab="${view}"]`)!.click();expect(panel.hidden).toBe(true);
+    }
+    root.querySelector<HTMLButtonElement>('[data-view-tab="calc"]')!.click();expect(panel.hidden).toBe(false);
+    expect(panel.querySelector('#result-heading')).not.toBeNull();
+  });
+
+  it('외부고리 탭이 아홉 곳으로 새 탭에서 나간다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    const tab = root.querySelector<HTMLButtonElement>('[data-view-tab="links"]')!;
+    expect(tab.textContent).toBe('외부고리');
+    tab.click();
+
+    const panel = root.querySelector<HTMLElement>('[data-view="links"]')!;
+    expect(panel.hidden).toBe(false);
+    // 계산기 판은 물러나 있어야 한다.
+    expect(root.querySelector<HTMLElement>('form[data-view="calc"]')!.hidden).toBe(true);
+
+    const cards = [...root.querySelectorAll<HTMLAnchorElement>('.link-card')];
+    expect(cards).toHaveLength(9);
+    expect(cards.map((card) => card.querySelector('.link-name')?.textContent))
+      .toEqual(['NIKKE SOLO', '니케 오버로드 시뮬레이터', '소장품 강화 최적화 시뮬레이터', 'enikk.app', '니케아리', '렛츠도로', '딜도로', '솔레 금서고', '도로파티']);
+    for (const card of cards) {
+      expect(card.target).toBe('_blank');
+      // 남의 페이지에 우리 창을 넘기지 않는다.
+      expect(card.rel).toContain('noopener');
+      expect(card.rel).toContain('noreferrer');
+      expect(card.href.startsWith('https://')).toBe(true);
+    }
+    // 우리가 운영하는 곳이 아니라는 사실이 화면에 적혀 있어야 한다.
+    expect(panel.textContent).toContain('우리가 운영하지 않습니다');
+  });
+
+  it('적 수치를 초기화하면 조건 한 줄도 함께 바뀐다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    const summary = root.querySelector<HTMLElement>('[data-battle-summary]')!;
+    const def = root.querySelector<HTMLInputElement>('#enemy-def')!;
+    const code = root.querySelector<HTMLSelectElement>('#enemy-code')!;
+    const parts = root.querySelector<HTMLInputElement>('#has-parts')!;
+
+    def.value = '99999'; def.dispatchEvent(new Event('change', { bubbles: true }));
+    code.value = '작열'; code.dispatchEvent(new Event('change', { bubbles: true }));
+    parts.checked = true; parts.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(summary.textContent).toContain('작열');
+    expect(summary.textContent).toContain('파츠');
+
+    root.querySelector<HTMLButtonElement>('[data-reset-enemy]')!.click();
+
+    expect(def.value).toBe('31784');
+    expect(code.value).toBe('');
+    expect(parts.checked).toBe(false);
+    // 전투 조건이 창으로 들어간 뒤로 이 한 줄이 화면에 남는 유일한 표시다 —
+    // 값만 되돌리고 줄을 그대로 두면 «초기화가 안 된다»로 보인다.
+    expect(summary.textContent).not.toContain('작열');
+    expect(summary.textContent).not.toContain('파츠');
+    expect(summary.textContent).toContain('무속성');
+  });
+
+  it('받은 전투 조건 코드를 적용해도 조건 한 줄이 따라온다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    const summary = root.querySelector<HTMLElement>('[data-battle-summary]')!;
+    expect(summary.textContent).toContain('무속성');
+
+    root.querySelector<HTMLButtonElement>('[data-battle-share-open]')!.click();
+    const input = root.querySelector<HTMLTextAreaElement>('[data-battle-share-in]')!;
+    // 90초 · 적 전격
+    input.value = encodeBattleCode(
+      { ...decodeBattleCode('NK3-e30'), duration: 90, enemyCode: '전격' } as never,
+    );
+    root.querySelector<HTMLButtonElement>('[data-battle-share-apply]')!.click();
+
+    expect(root.querySelector<HTMLInputElement>('#duration')!.value).toBe('90');
+    expect(summary.textContent).toContain('전격');
+    expect(summary.textContent).toContain('90초');
+  });
+
+  it('조합 공유는 「이 덱만」으로 열리고, 받은 덱 하나가 다른 덱을 지우지 않는다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    // 덱 1·3을 서로 다르게 채우고 5덱 모드를 켠다.
+    const fill = (deckId: number, names: string[]) => {
+      root.querySelector<HTMLInputElement>('#squad-mode')!.checked = true;
+      const state = JSON.parse(localStorage.getItem('nikke-state-v1') ?? '{}');
+      void state; void deckId; void names;
+    };
+    void fill;
+
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    const scope = root.querySelector<HTMLElement>('[data-share-scope]')!;
+    expect(scope).not.toBeNull();
+    expect(scope.querySelector('.share-scope-pick.is-on')?.textContent).toBe('모든 덱');
+    expect(root.querySelector('[data-share-scope-note]')?.textContent).toContain('판 전체가 바뀝니다');
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="one"]')!.click();
+    expect(scope.querySelector('.share-scope-pick.is-on')?.textContent).toBe('이 덱만');
+    expect(root.querySelector('[data-share-scope-note]')?.textContent).toContain('덱 1에만 들어갑니다');
+  });
+
+  it('덱 세트 — 속성 단추를 누르면 편성 전체가 그 세트로 바뀌고, 세트마다 따로 남는다', () => {
+    localStorage.setItem('nikke-state-v1', JSON.stringify({
+      decks: [{ id: 1, squad: ['리타', '', '', '', ''], characters: {} }, { id: 2, squad: ['', '', '', '', ''], characters: {} }],
+      fiveDeckMode: false, activeDeckId: 1, carryOverSettings: false,
+      deckSet: '기본',
+      deckSets: { 수냉: [{ id: 1, squad: ['프리바티', '', '', '', ''], characters: {} }, { id: 2, squad: ['리타', '', '', '', ''], characters: {} }] },
+    }));
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const sets = root.querySelector<HTMLElement>('[data-deck-sets]')!;
+    expect([...sets.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['기본', '수냉', '작열', '철갑', '전격', '풍압']);
+    expect(sets.querySelector('.deck-set.is-on')!.textContent).toBe('기본');
+    // 니케가 든 세트에는 점이 찍힌다(기본·수냉).
+    expect([...sets.querySelectorAll('.has-decks')].map((button) => button.textContent)).toEqual(['기본', '수냉']);
+    const firstName = () => root.querySelector('[data-slot-card="0"]')!.textContent;
+    expect(firstName()).toContain('리타');
+
+    sets.querySelector<HTMLButtonElement>('[data-deck-set="수냉"]')!.click();
+    expect(sets.querySelector('.deck-set.is-on')!.textContent).toBe('수냉');
+    expect(firstName()).toContain('프리바티');
+    // 둘 이상 찬 세트라 여러덱 모드가 켜진다.
+    expect(root.querySelector<HTMLInputElement>('#squad-mode')!.checked).toBe(true);
+    let saved = JSON.parse(localStorage.getItem('nikke-state-v1')!) as { deckSet: string; deckSets: Record<string, Array<{ squad: string[] }>>; decks: Array<{ squad: string[] }> };
+    expect(saved.deckSet).toBe('수냉');
+    expect(saved.decks[0]!.squad[0]).toBe('프리바티');
+    expect(saved.deckSets['기본']![0]!.squad[0]).toBe('리타');
+    expect(saved.deckSets['수냉']).toBeUndefined();
+
+    // 빈 세트는 빈 덱으로 시작하고, 돌아오면 원래 것이 그대로다.
+    sets.querySelector<HTMLButtonElement>('[data-deck-set="작열"]')!.click();
+    expect(firstName()).not.toContain('프리바티');
+    expect(firstName()).not.toContain('리타');
+    sets.querySelector<HTMLButtonElement>('[data-deck-set="기본"]')!.click();
+    expect(firstName()).toContain('리타');
+    saved = JSON.parse(localStorage.getItem('nikke-state-v1')!) as typeof saved;
+    expect(saved.deckSet).toBe('기본');
+    expect(saved.deckSets['수냉']![0]!.squad[0]).toBe('프리바티');
+  });
+
+  it('프리셋은 어느 범위로 저장했는지 함께 알린다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="one"]')!.click();
+    root.querySelector<HTMLInputElement>('[data-preset-name]')!.value = '한 덱짜리';
+    root.querySelector<HTMLButtonElement>('[data-preset-save]')!.click();
+    expect(root.querySelector('[data-share-msg]')?.textContent).toContain('덱 1만');
+
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="all"]')!.click();
+    root.querySelector<HTMLInputElement>('[data-preset-name]')!.value = '판 전체';
+    root.querySelector<HTMLButtonElement>('[data-preset-save]')!.click();
+    expect(root.querySelector('[data-share-msg]')?.textContent).toContain('모든 덱');
+
+    const stored = JSON.parse(localStorage.getItem('nikke-presets-v1')!) as Array<{ name: string }>;
+    expect(stored.map((item) => item.name).sort()).toEqual(['판 전체', '한 덱짜리']);
+  });
+
+  it('같은 이름으로 저장하면 한 번 묻는다 — 말없이 덮어쓰지 않는다', () => {
+    // 이름을 다시 쓰는 것은 «갱신»일 때도 있지만 «남의 자리인 줄 몰랐다»일 때도 있다
+    // (피드백 2026-09-05).
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    const name = root.querySelector<HTMLInputElement>('[data-preset-name]')!;
+    const save = root.querySelector<HTMLButtonElement>('[data-preset-save]')!;
+    const stored = () => JSON.parse(localStorage.getItem('nikke-presets-v1')!) as
+      Array<{ name: string; code: string }>;
+
+    name.value = '솔레 1군';
+    save.click();
+    const first = stored()[0]!.code;
+    expect(stored()).toHaveLength(1);
+
+    // 편성을 바꾸고 같은 이름으로 저장하려 든다.
+    root.querySelector<HTMLButtonElement>('[data-share-close]')!.click();
+    clearCharacterSlot(root, 0);
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    name.value = '솔레 1군';
+    save.click();
+    // 첫 번째 누름은 되묻기 — 저장된 것은 그대로다.
+    expect(save.textContent).toBe('덮어씁니다');
+    expect(root.querySelector('[data-share-msg]')?.textContent).toContain('이미 있습니다');
+    expect(stored()[0]!.code).toBe(first);
+
+    save.click();
+    expect(stored()).toHaveLength(1);
+    expect(stored()[0]!.code).not.toBe(first);
+    expect(root.querySelector('[data-share-msg]')?.textContent).toContain('덮어썼습니다');
+    expect(save.textContent).toBe('저장');
+  });
+
+  it('이름을 고치면 되묻기가 풀린다 — 새 이름은 새로 저장이다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    const name = root.querySelector<HTMLInputElement>('[data-preset-name]')!;
+    const save = root.querySelector<HTMLButtonElement>('[data-preset-save]')!;
+
+    name.value = '솔레 1군';
+    save.click();
+    name.value = '솔레 1군';
+    save.click();
+    expect(save.textContent).toBe('덮어씁니다');
+
+    name.value = '솔레 2군';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(save.textContent).toBe('저장');
+    save.click();
+    const stored = JSON.parse(localStorage.getItem('nikke-presets-v1')!) as Array<{ name: string }>;
+    expect(stored.map((item) => item.name).sort()).toEqual(['솔레 1군', '솔레 2군']);
+  });
+
+  it('저장한 프리셋을 초상화로 알아본다', () => {
+    // 이름만 늘어놓으면 «어떤 조합이었나»가 안 떠오른다(피드백 2026-09-05).
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    root.querySelector<HTMLInputElement>('[data-preset-name]')!.value = '솔레 1군';
+    root.querySelector<HTMLButtonElement>('[data-preset-save]')!.click();
+
+    const list = root.querySelector<HTMLElement>('[data-preset-list]')!;
+    const shots = [...list.querySelectorAll<HTMLImageElement>('.share-portrait')];
+    expect(shots.length).toBeGreaterThan(0);
+    // 초상화에는 이름이 붙어 있어야 한다 — 그림을 못 받는 사람도 읽을 수 있게.
+    expect(shots.map((image) => image.alt)).toContain('리타');
+  });
+
+  it('덱이 여럿 든 코드에서 원하는 덱을 골라 꺼낸다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    // 2덱까지 채운 판을 «모든 덱»로 담아 코드를 만든다.
+    root.querySelector<HTMLInputElement>('#squad-mode')!.click();
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(root, 0, '나가');
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="all"]')!.click();
+    const code = root.querySelector<HTMLTextAreaElement>('[data-share-out]')!.value;
+
+    // 판을 비우고 「이 덱만」으로 그 코드를 받는다.
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="one"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="1"]')!.click();
+    root.querySelector<HTMLTextAreaElement>('[data-share-in]')!.value = code;
+    root.querySelector<HTMLButtonElement>('[data-share-apply]')!.click();
+
+    // 첫 덱이 들어가고, 다른 덱으로 갈아 끼울 고르개가 함께 뜬다.
+    const pick = root.querySelector<HTMLElement>('[data-share-pick]')!;
+    expect(pick.hidden).toBe(false);
+    const buttons = [...pick.querySelectorAll<HTMLButtonElement>('[data-share-pick-deck]')];
+    expect(buttons.map((b) => b.dataset.sharePickDeck)).toEqual(['1', '2']);
+    expect(buttons[0]!.classList.contains('is-on')).toBe(true);
+
+    const deckOne = () => JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].squad;
+    expect(deckOne()[0]).toBe('리타');
+
+    // 2덱을 고르면 그 덱이 지금 보고 있는 덱에 들어간다.
+    buttons[1]!.click();
+    expect(deckOne()[0]).toBe('나가');
+    const after = [...root.querySelectorAll<HTMLButtonElement>('[data-share-pick-deck]')];
+    expect(after[1]!.classList.contains('is-on')).toBe(true);
+  });
+
+  it('코어 유무를 덱마다 따로 잡으면 덱별로 다르게 계산한다', async () => {
+    // 같은 편성을 코어 있는 판과 없는 판으로 나란히 재려고 조건을 두 번 바꿔 돌리던
+    // 것을 한 번에 끝낸다 (피드백 2026-09-08).
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#squad-mode')!.click();
+    // 2덱에도 편성을 채운다 — 빈 덱은 계산에 들어가지 않는다.
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    searchRoster(root, '크라운');
+    root.querySelector<HTMLButtonElement>('[data-roster-cell="크라운"]')!.click();
+
+    root.querySelector<HTMLButtonElement>('[data-battle-open]')!.click();
+    const coreOn = root.querySelector<HTMLInputElement>('#has-core')!;
+    coreOn.checked = true;
+    coreOn.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLInputElement>('#core-per-deck')!.click();
+    // 1덱만 코어를 끈다.
+    const first = root.querySelector<HTMLInputElement>('[data-deck-core-input="1"]')!;
+    first.checked = false;
+    first.dispatchEvent(new Event('change', { bubbles: true }));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    const byDeck = new Map(client.requests.map((request, index) => [index, request.corePx]));
+    expect([...byDeck.values()]).toEqual([0, 52]);
+  });
+
+  it('전투 조건 창에서 엔터는 계산이 아니라 창을 닫는다', () => {
+    // 값이 판(form) 안에 있어 엔터 한 번이 그대로 제출이었다 — 코어 크기를 고치고
+    // 엔터를 치면 그 자리에서 계산이 돌았다 (피드백 2026-09-10).
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-battle-open]')!.click();
+    const modal = root.querySelector<HTMLElement>('[data-battle-modal]')!;
+    expect(modal.hidden).toBe(false);
+
+    const core = root.querySelector<HTMLInputElement>('#core-px')!;
+    core.value = '70';
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    core.dispatchEvent(enter);
+
+    expect(enter.defaultPrevented).toBe(true);
+    expect(modal.hidden).toBe(true);
+    expect(client.simulateCalls).toBe(0);
+    // 고친 값은 그대로 남는다 — 닫는 것이 되돌리는 것은 아니다.
+    expect(root.querySelector<HTMLInputElement>('#core-px')!.value).toBe('70');
+  });
+
+  it('신식 적정거리 — 처음 쓰는 사람은 거리로 계산하고, 방식이 없는 옛 저장본은 구식으로 읽는다', () => {
+    const distanceSettings = {
+      ...settings,
+      accuracy: { modelN: 2.55, weapons: {
+        MG: { baseDiameter: 10, accSlope: 0 }, AR: { baseDiameter: 76, accSlope: 0.69 },
+        SMG: { baseDiameter: 110, accSlope: 1 },
+      } },
+      accuracyDistance: { modelN: 2.55, weapons: {
+        MG: { baseDiameter: 95, accSlope: 0, coldDiameter: 253 }, AR: { baseDiameter: 76, accSlope: 0.69 },
+        SMG: { baseDiameter: 97, accSlope: 0 },
+      } },
+      distance: {
+        reference: 30, min: 5, max: 100, presets: { near: 22, mid: 30, far: 52 },
+        ranges: { SG: [0, 25], SMG: [15, 35], AR: [25, 45], MG: [35, 55], SR: [45, 100] } as Record<string, [number, number]>,
+      },
+    };
+    const deps = { catalog, settings: distanceSettings, version: 'v1', client: new FakeClient(), storage: localStorage };
+    const unmount = mountCalculator(root, deps);
+    const mode = (value: string) => root.querySelector<HTMLInputElement>(`[data-range-model][value="${value}"]`)!;
+    expect(mode('distance').checked).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-optimal-range]')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-range-distance]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-phase-add="range"]')!.hidden).toBe(true);
+
+    const toggle = root.querySelector<HTMLInputElement>('#has-core')!;
+    if (!toggle.checked) toggle.click();
+    root.querySelector<HTMLButtonElement>('[data-distance-preset="52"]')!.click();
+    expect(root.querySelector('[data-distance-now]')!.textContent).toBe('적정거리 MG·SR · 코어·보스 크기 ×0.58');
+    // 보스 판정 직경도 지금 거리에서 쓰이는 값을 보인다(360 × 30/52 ≈ 208).
+    expect(root.querySelector('[data-boss-diameter-now]')!.textContent).toBe('거리 52에서 208');
+    // 원거리에서는 코어가 작게 보인다(52 × 30/52 = 30px) — MG는 예열 후 탄착군으로 잰다.
+    expect(root.querySelector('[data-core-chance]')!.textContent).toBe('코어 명중 (거리 52 · 코어 30px) MG 5% · AR 9% · SMG 5%');
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle).toMatchObject({ rangeModel: 'distance', distance: 52 });
+
+    // 구식으로 바꾸면 무기군 체크가 돌아온다.
+    mode('legacy').click();
+    expect(root.querySelector('[data-boss-diameter-now]')!.textContent).toBe('');
+    expect(root.querySelector<HTMLElement>('[data-optimal-range]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-range-distance]')!.hidden).toBe(true);
+    expect(root.querySelector('[data-core-chance]')!.textContent).toBe('코어 명중 MG 100% · AR 38% · SMG 15%');
+
+    // 방식이 없는 옛 저장본은 구식이다 — 저장해 둔 결과가 바뀌면 안 된다.
+    mode('distance').click();
+    unmount();
+    root.replaceChildren();
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!);
+    delete saved.battle.rangeModel;
+    localStorage.setItem('nikke-state-v1', JSON.stringify(saved));
+    mountCalculator(root, deps);
+    expect(mode('legacy').checked).toBe(true);
+  });
+
+  it('코어 직경을 고치면 바로 아래 무기군별 코어 명중률이 바뀐다', () => {
+    const accuracy = { modelN: 2.55, weapons: {
+      MG: { baseDiameter: 10, accSlope: 0 }, AR: { baseDiameter: 76, accSlope: 0.69 },
+      SMG: { baseDiameter: 110, accSlope: 1 },
+    } };
+    mountCalculator(root, { catalog, settings: { ...settings, accuracy }, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const toggle = root.querySelector<HTMLInputElement>('#has-core')!;
+    const core = root.querySelector<HTMLInputElement>('#core-px')!;
+    const label = root.querySelector<HTMLElement>('[data-core-chance]')!;
+    // 처음 쓰는 사람은 신식(거리)이다 — 구식 탄착군 표를 보려고 구식으로 바꾼다.
+    root.querySelector<HTMLInputElement>('[data-range-model][value="legacy"]')!.click();
+    if (toggle.checked) toggle.click();
+    expect(label.textContent).toBe('');
+
+    toggle.click();
+    core.value = '52';
+    core.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(label.textContent).toBe('코어 명중 MG 100% · AR 38% · SMG 15%');
+    core.value = '8';
+    core.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(label.textContent).toBe('코어 명중 MG 57% · AR 0% · SMG 0%');
+  });
+
+  it('안내 띠 아래에 초읽기가 hh:mm:ss로 돈다', () => {
+    const target = Date.parse(seedCountdown().target);
+    // 남은 시간이 정확히 1시간 2분 3초인 순간으로 시계를 맞춘다.
+    vi.useFakeTimers();
+    vi.setSystemTime(target - (3_600_000 + 2 * 60_000 + 3_000));
+    try {
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      const band = root.querySelector<HTMLElement>('[data-countdown]')!;
+      expect(band.hidden).toBe(false);
+      expect(band.querySelector('[data-countdown-label]')!.textContent)
+        .toBe('아무개까지 남은 시간');
+      const clock = () => band.querySelector('[data-countdown-clock]')!.textContent;
+      expect(clock()).toBe('01:02:03');
+      // 대괄호는 화면에 그대로 나온다.
+      expect(band.textContent).toBe('[아무개까지 남은 시간 01:02:03]');
+
+      vi.advanceTimersByTime(4_000);
+      expect(clock()).toBe('01:01:59');
+    } finally {
+      vi.useRealTimers();
+      COUNTDOWNS.length = 0;
+    }
+  });
+
+  it('셈할 것이 없으면 초읽기 줄이 아예 안 보인다', () => {
+    // 지금이 그 상태다 — 칠무해 석방 초읽기가 끝나 `COUNTDOWNS`를 비워 두었다.
+    expect(countdownToShow()).toBeNull();
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    expect(root.querySelector<HTMLElement>('[data-countdown]')!.hidden).toBe(true);
+  });
+
+  it('초읽기는 안내 띠를 닫아도 남는다 — 닫는 것은 「읽었다」는 뜻이다', () => {
+    seedCountdown();
+    try {
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      root.querySelector<HTMLButtonElement>('[data-campaign-close]')!.click();
+      expect(root.querySelector<HTMLElement>('[data-campaign]')!.hidden).toBe(true);
+      expect(root.querySelector<HTMLElement>('[data-countdown]')!.hidden).toBe(false);
+    } finally {
+      COUNTDOWNS.length = 0;
+    }
+  });
+
+  it('시각이 지나면 00:00:00에서 멈춘다', () => {
+    const target = Date.parse(seedCountdown().target);
+    vi.useFakeTimers();
+    vi.setSystemTime(target + 5_000);
+    try {
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      const clock = () => root.querySelector('[data-countdown-clock]')!.textContent;
+      expect(clock()).toBe('00:00:00');
+      vi.advanceTimersByTime(10_000);
+      expect(clock()).toBe('00:00:00');
+    } finally {
+      vi.useRealTimers();
+      COUNTDOWNS.length = 0;
+    }
+  });
+
+  it('화면에서 떨어져 나간 시계는 스스로 멈춘다', () => {
+    // 걷는 함수를 안 부르고 판을 갈아 끼우는 자리가 있다(바로 아래 «저장된 결과»
+    // 시험이 그렇게 한다). 그때 1초마다 도는 시계가 쌓이면 뒤로 갈수록 느려진다.
+    seedCountdown();
+    vi.useFakeTimers();
+    try {
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      const clock = root.querySelector<HTMLElement>('[data-countdown-clock]')!;
+      vi.advanceTimersByTime(1_000);
+      const ticking = clock.textContent;
+
+      root.replaceChildren();               // 시계가 화면에서 떨어진다
+      vi.advanceTimersByTime(5_000);        // 다음 한 번에 스스로 멈춘다
+      expect(vi.getTimerCount()).toBe(0);
+      // 떨어진 뒤로는 글자도 안 건드린다.
+      expect(clock.textContent).toBe(ticking);
+    } finally {
+      vi.useRealTimers();
+      COUNTDOWNS.length = 0;
+    }
+  });
+
+  it('돌고 있을 때만 계산 취소 단추가 나온다', async () => {
+    // 「보스 조건 잘못 걸고 돌렸는데 끝날 때까지 기다려야 한다」는 제보(2026-09-06).
+    const client = new HangingClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    const cancel = root.querySelector<HTMLButtonElement>('[data-calc-cancel]')!;
+    expect(cancel.hidden).toBe(true);
+
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(cancel.hidden).toBe(false);
+    expect(client.simulateCalls).toBe(1);
+
+    const prepares = client.prepareCalls;
+    cancel.click();
+    await flush();
+
+    expect(cancel.hidden).toBe(true);
+    // 실패가 아니다 — 자기가 누른 것이 오류로 보이면 안 된다.
+    expect(root.querySelector('[data-status]')?.textContent).toContain('취소');
+    expect(root.querySelector('[data-status]')?.textContent).not.toContain('실패');
+    expect(root.querySelector<HTMLElement>('[data-errors]')?.hidden).toBe(true);
+    // 끊은 스레드를 곧바로 데워 둔다 — 다음 계산이 준비를 기다리지 않게.
+    expect(client.prepareCalls).toBe(prepares + 1);
+    // 다시 돌릴 수 있다.
+    expect(root.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+  });
+
+  it('취소를 못 하는 계산기 대역에서는 단추를 아예 안 낸다', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(root.querySelector<HTMLButtonElement>('[data-calc-cancel]')!.hidden).toBe(true);
+  });
+
+  it('백업 창이 열리고, 저장된 것이 없으면 그렇게 말한다', () => {
+    // 서버에 아무것도 안 남기는 계산기라 브라우저를 갈아타면 통째로 사라진다.
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+    const modal = root.querySelector<HTMLElement>('[data-backup-modal]')!;
+    expect(modal.hidden).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-backup-open]')!.click();
+    expect(modal.hidden).toBe(false);
+    // 이 창은 무엇이 담기고 무엇이 안 담기는지 적어 둬야 한다.
+    expect(modal.textContent).toContain('안 담기는 것');
+  });
+
+  it('백업을 뜨면 지금 저장된 것이 파일에 담긴다', () => {
+    localStorage.setItem('nikke-presets-v1', '[{"name":"솔레 1군","code":"NK2-x","at":"2026-01-01"}]');
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+    });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')?.click();
+
+    // jsdom에는 다운로드가 없다 — 링크를 가로채 담긴 내용만 본다.
+    let saved = '';
+    const realCreate = URL.createObjectURL;
+    const realClick = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = ((blob: Blob) => { void blob; return 'blob:x'; }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
+    HTMLAnchorElement.prototype.click = function click(this: HTMLAnchorElement) {
+      saved = this.download;
+    };
+    try {
+      root.querySelector<HTMLButtonElement>('[data-backup-open]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-backup-save]')!.click();
+    } finally {
+      URL.createObjectURL = realCreate;
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+    expect(saved).toMatch(/^니케계산기_백업_\d{8}\.json$/);
+    expect(root.querySelector('[data-backup-msg]')?.textContent).toContain('떴습니다');
+  });
+
+  it('유니온 탭에는 판 전체를 한 코드로 주고받는 줄이 있다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      blablaProxy: 'https://proxy.example',
+    } as Parameters<typeof mountCalculator>[1] & { blablaProxy: string });
+
+    expect(root.querySelector('[data-union-set-copy]')).not.toBeNull();
+    expect(root.querySelector('[data-union-set-paste]')).not.toBeNull();
+    expect(root.querySelector('[data-union-set-apply]')).not.toBeNull();
+    // 명단이 담기지 않는다는 사실은 화면에 적혀 있어야 한다 — 남의 계정 정보다.
+    const step = root.querySelector<HTMLElement>('[data-union-step="3"]')!;
+    expect(step.textContent).toContain('유니온원 명단은 담기지 않습니다');
+  });
+
+  it('공유 서버 주소가 없으면 「공유에서 판 고르기」를 감춘다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      blablaProxy: 'https://proxy.example',
+    } as Parameters<typeof mountCalculator>[1] & { blablaProxy: string });
+
+    // 시험 환경에는 VITE_SHARE_API가 없다 — 누를 수 없는 단추를 남기지 않는다.
+    const button = root.querySelector<HTMLButtonElement>('[data-union-set-share]');
+    expect(button?.hidden).toBe(true);
+  });
+
+  it('블라블라링크 연동 창은 자동을 기본값으로 공식 서버 다섯 곳을 보여 준다', () => {
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      blablaProxy: 'https://proxy.example',
+    } as Parameters<typeof mountCalculator>[1] & { blablaProxy: string });
+
+    root.querySelector<HTMLButtonElement>('[data-blabla-open]')!.click();
+    const server = root.querySelector<HTMLSelectElement>('[data-blabla-server]');
+
+    expect(server).not.toBeNull();
+    expect(server!.value).toBe('');
+    expect([...server!.options].map((option) => [option.value, option.textContent])).toEqual([
+      ['', '자동 (보유 니케가 가장 많은 서버)'],
+      ['83', '한국'],
+      ['81', '일본'],
+      ['84', '글로벌'],
+      ['82', '북미'],
+      ['85', '동남아'],
+    ]);
+  });
+
+  it('선택한 서버를 Worker 요청과 완료 안내에 사용한다', async () => {
+    let sentBody: Record<string, unknown> | null = null;
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body));
+      return Response.json({
+        openid: '12345678901234567890',
+        areas: [{
+          area: 84,
+          characters: [{ name_code: 5001, grade: 0, core: 0 }],
+          details: [{ name_code: 5001 }],
+          stateEffects: [],
+          outpost: null,
+        }],
+      });
+    });
+    const blablaCatalog = catalog.map((entry) => ({
+      ...entry,
+      nameCode: entry.name === '리타' ? 5001 : null,
+    }));
+    mountCalculator(root, {
+      catalog: blablaCatalog,
+      settings,
+      version: 'v1',
+      client: new FakeClient(),
+      storage: localStorage,
+      blablaProxy: 'https://proxy.example',
+    });
+
+    root.querySelector<HTMLButtonElement>('[data-blabla-open]')!.click();
+    const server = root.querySelector<HTMLSelectElement>('[data-blabla-server]')!;
+    const url = root.querySelector<HTMLInputElement>('[data-blabla-url]')!;
+    server.value = '84';
+    url.value = 'https://www.blablalink.com/user?openid=12345678901234567890';
+    root.querySelector<HTMLButtonElement>('[data-blabla-sync]')!.click();
+    await flush();
+    await flush();
+
+    expect(sentBody).toEqual({ profileUrl: url.value, area: 84 });
+    expect(root.querySelector<HTMLElement>('[data-blabla-status]')!.textContent)
+      .toContain('글로벌 서버에서 1명을 불러왔습니다.');
+  });
+
+  it('한 번 이어 둔 블라블라링크 주소는 새로고침 단추로 다시 받는다', async () => {
+    // 육성은 계속 바뀌므로 다시 받는 일이 잦다. 그때마다 주소를 복사해 오는 것이
+    // 가장 귀찮은 대목이었다 — 통한 주소만 남겨 두고 단추 하나로 다시 받는다.
+    vi.stubGlobal('fetch', async () => Response.json({
+      openid: '12345678901234567890',
+      areas: [{
+        area: 84,
+        characters: [{ name_code: 5001, grade: 0, core: 0 }],
+        details: [{ name_code: 5001 }],
+        stateEffects: [],
+        outpost: null,
+      }],
+    }));
+    const blablaCatalog = catalog.map((entry) => ({
+      ...entry,
+      nameCode: entry.name === '리타' ? 5001 : null,
+    }));
+    const deps = {
+      catalog: blablaCatalog,
+      settings,
+      version: 'v1',
+      client: new FakeClient(),
+      storage: localStorage,
+      blablaProxy: 'https://proxy.example',
+    };
+    const unmount = mountCalculator(root, deps);
+
+    // 아직 이어 둔 적이 없으면 누를 것이 없다.
+    const refresh = () => root.querySelector<HTMLButtonElement>('[data-blabla-refresh]')!;
+    expect(refresh().hidden).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[data-blabla-open]')!.click();
+    root.querySelector<HTMLInputElement>('[data-blabla-url]')!.value =
+      'https://www.blablalink.com/user?openid=12345678901234567890';
+    root.querySelector<HTMLButtonElement>('[data-blabla-sync]')!.click();
+    await flush();
+    await flush();
+
+    // 통한 주소만 남는다 — 서버까지 함께 적어 다음에도 같은 곳을 본다.
+    expect(refresh().hidden).toBe(false);
+    expect(JSON.parse(localStorage.getItem('nikke-blabla-profile-v1')!))
+      .toEqual({ url: 'https://www.blablalink.com/user?openid=12345678901234567890', area: 84 });
+
+    // 새로 띄워도 단추가 남아 있고, 창을 열지 않고 눌러도 받아 온다.
+    unmount();
+    root.replaceChildren();
+    mountCalculator(root, deps);
+    expect(refresh().hidden).toBe(false);
+    refresh().click();
+    await flush();
+    await flush();
+    expect(root.querySelector<HTMLElement>('[data-roster-note]')!.textContent)
+      .toContain('블라블라링크 글로벌 1명 적용');
+  });
+
+  it('바디 방어율 구간 두 개를 편집하고 복원하며 삭제한다', () => {
+    const deps = { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage };
+    const unmount = mountCalculator(root, deps);
+    for (const [from, to] of [[30, 60], [90, 120]]) {
+      root.querySelector<HTMLButtonElement>('[data-phase-add="defense"]')!.click();
+      const rows = root.querySelectorAll<HTMLElement>('[data-phase-row^="defense:"]');
+      const inputs = rows[rows.length - 1]!.querySelectorAll<HTMLInputElement>('input');
+      inputs[0]!.value = String(from);
+      inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }));
+      inputs[1]!.value = String(to);
+      inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(inputs[2]!.value).toBe('60');
+      inputs[2]!.value = '75';
+      inputs[2]!.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.defenseRateWindows)
+      .toEqual([{ from: 30, to: 60, rate: 75 }, { from: 90, to: 120, rate: 75 }]);
+    unmount();
+    root.replaceChildren();
+    mountCalculator(root, deps);
+    expect(root.querySelectorAll('[data-phase-row^="defense:"]')).toHaveLength(2);
+    expect(root.querySelector<HTMLInputElement>('[data-phase-row="defense:1"] input')!.value).toBe('90');
+    expect(root.querySelectorAll<HTMLInputElement>('[data-phase-row="defense:1"] input')[2]!.value).toBe('75');
+    root.querySelector<HTMLButtonElement>('[data-phase-drop="defense:0"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-phase-drop="defense:0"]')!.click();
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.defenseRateWindows).toEqual([]);
+  });
+
+  it('유효 사거리 시간과 무기군을 저장하고 복원한다', () => {
+    const deps = { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage };
+    const dispose = mountCalculator(root, deps);
+    // 유효 사거리 구간은 구식 적정거리의 것이다(처음 쓰는 사람은 신식).
+    root.querySelector<HTMLInputElement>('[data-range-model][value="legacy"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-phase-add="range"]')!.click();
+    const row = root.querySelector('[data-phase-row="range:0"]')!;
+    const inputs = row.querySelectorAll<HTMLInputElement>('input[type="number"]');
+    inputs[0]!.value = '30'; inputs[0]!.dispatchEvent(new Event('input'));
+    inputs[1]!.value = '60'; inputs[1]!.dispatchEvent(new Event('input'));
+    row.querySelector<HTMLInputElement>('[aria-label="유효 사거리 1 AR"]')!.click();
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.optimalRangeWindows).toEqual([{ from: 30, to: 60, weapons: ['AR'] }]);
+    dispose(); root.replaceChildren();
+    const stop = mountCalculator(root, deps);
+    expect(root.querySelector<HTMLInputElement>('[aria-label="유효 사거리 1 AR"]')!.checked).toBe(true);
+    root.querySelector<HTMLButtonElement>('[aria-label="유효 사거리 1 삭제"]')!.click();
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.optimalRangeWindows).toEqual([]);
+    stop();
+  });
+
+  it('코어 노출 구간 두 개를 편집하고 복원하며 삭제한다', () => {
+    const deps = { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage };
+    const unmount = mountCalculator(root, deps);
+    for (const [from, to] of [[30, 60], [90, 120]]) {
+      root.querySelector<HTMLButtonElement>('[data-phase-add="core"]')!.click();
+      const rows = root.querySelectorAll<HTMLElement>('[data-phase-row^="core:"]');
+      const inputs = rows[rows.length - 1]!.querySelectorAll<HTMLInputElement>('input');
+      inputs[0]!.value = String(from);
+      inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }));
+      inputs[1]!.value = String(to);
+      inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.coreWindows)
+      .toEqual([{ from: 30, to: 60 }, { from: 90, to: 120 }]);
+    unmount();
+    root.replaceChildren();
+    mountCalculator(root, deps);
+    expect(root.querySelectorAll('[data-phase-row^="core:"]')).toHaveLength(2);
+    expect(root.querySelector<HTMLInputElement>('[data-phase-row="core:1"] input')!.value).toBe('90');
+    root.querySelector<HTMLButtonElement>('[data-phase-drop="core:0"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-phase-drop="core:0"]')!.click();
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle.coreWindows).toEqual([]);
+  });
+
+  it('보스 메이커에서 잡은 전투 조건이 새로고침에도 남는다', () => {
+    // 폼은 사람이 만질 때(change) 저장된다 — 프로그램이 써넣은 값에는 그 이벤트가
+    // 없어서, 보스 메이커에서 잡은 족자·속저가 새로고침에 날아갔다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-settings-tab="maker"]')!.click();
+
+    const [immune, element] = [...root.querySelectorAll<HTMLButtonElement>('.bm-phase-head .bm-chip')];
+    immune!.click();
+    element!.click();
+
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!) as
+      { battle: { immuneWindows: unknown[]; elementWindows: unknown[] } };
+    expect(saved.battle.immuneWindows).toHaveLength(1);
+    expect(saved.battle.elementWindows).toHaveLength(1);
+  });
+
+  it('보스 메이커가 동일한 전투 조건 편집기를 열고 Escape는 편집기만 닫는다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const modal = root.querySelector<HTMLElement>('[data-battle-modal]')!;
+    const originalInputs = [...modal.querySelectorAll('input,select')];
+    root.querySelector<HTMLButtonElement>('[data-settings-tab="maker"]')!.click();
+    const open = root.querySelector<HTMLButtonElement>('[data-bm-all-battle]');
+    expect(open).not.toBeNull();
+    open!.click();
+    expect(modal.hidden).toBe(false);
+    expect(modal.classList.contains('from-boss-maker')).toBe(true);
+    expect([...modal.querySelectorAll('input,select')]).toEqual(originalInputs);
+    for (const kind of ['defense', 'range', 'core', 'immune', 'element']) {
+      modal.querySelector<HTMLButtonElement>(`[data-phase-add="${kind}"]`)!.click();
+    }
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!).battle;
+    for (const field of ['defenseRateWindows', 'optimalRangeWindows', 'coreWindows', 'immuneWindows', 'elementWindows']) {
+      expect(saved[field]).toHaveLength(1);
+    }
+    modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(modal.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-boss-maker]')!.hidden).toBe(false);
+  });
+
+  it('보스 메이커는 전투 조건 옆의 탭으로 열고 닫는다', () => {
+    // 조건판을 «대신 여는» 화면이라 단추가 아니라 탭이다 — 무엇을 보고 있는지가
+    // 제목 자리에서 읽혀야 한다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const tab = (which: string) => root.querySelector<HTMLButtonElement>(`[data-settings-tab="${which}"]`)!;
+    const maker = () => root.querySelector<HTMLElement>('[data-boss-maker]')!;
+
+    expect(tab('battle').classList.contains('is-on')).toBe(true);
+    expect(tab('maker').textContent).toContain('BETA');
+    // 제목 h2를 탭으로 갈아 끼웠으므로 판의 이름표도 여기로 따라와야 한다.
+    expect(tab('battle').id).toBe('settings-heading');
+    expect(root.querySelector('.settings-panel')?.getAttribute('aria-labelledby'))
+      .toBe('settings-heading');
+    expect(maker().hidden).toBe(true);
+
+    tab('maker').click();
+    expect(maker().hidden).toBe(false);
+    expect(tab('maker').getAttribute('aria-selected')).toBe('true');
+    expect(tab('battle').getAttribute('aria-selected')).toBe('false');
+
+    // 창 안에서 닫아도 탭이 전투 조건으로 돌아온다.
+    root.querySelector<HTMLButtonElement>('[data-bm-close]')!.click();
+    expect(maker().hidden).toBe(true);
+    expect(tab('battle').classList.contains('is-on')).toBe(true);
+  });
+
+  it('검색칸에서 끌어 바깥에서 놓아도 고르기 판이 닫히지 않는다', () => {
+    // 끌어 놓기의 click은 누른 곳과 뗀 곳의 공통 조상에서 난다 — 그것을 «바깥 누르기»로
+    // 읽으면 글자를 넉넉히 끌었을 뿐인데 판이 닫힌다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const picker = () => root.querySelector<HTMLElement>('[data-picker]')!;
+    focusSlot(root, 1);
+    expect(picker().hidden).toBe(false);
+
+    const search = root.querySelector<HTMLInputElement>('[data-roster-search]')!;
+    search.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    root.querySelector('h1')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(picker().hidden).toBe(false);
+
+    // 바깥에서 시작한 진짜 누르기는 여전히 닫는다.
+    const outside = root.querySelector('h1')!;
+    outside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    outside.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(picker().hidden).toBe(true);
+  });
+
+  it('앞글자를 이어 치면 다섯 칸이 한 번에 채워진다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-abbrev-open]')!.click();
+    const input = root.querySelector<HTMLInputElement>('[data-abbrev-input]')!;
+    input.value = '리센홍모라';
+    root.querySelector<HTMLButtonElement>('[data-abbrev-apply]')!.click();
+
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].squad)
+      .toEqual(['리타', '센티', '홍련', '모더니아', '라푼젤']);
+    // 글자마다 무엇으로 읽었는지 보이고, 그 자리에서 고칠 수 있다.
+    const picks = [...root.querySelectorAll<HTMLElement>('[data-abbrev-pick]')];
+    expect(picks.map((cell) => cell.dataset.abbrevPick)).toEqual(['리', '센', '홍', '모', '라']);
+  });
+
+  it('약어 예외를 등록하면 이 브라우저에서 그 뜻으로 풀린다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-abbrev-open]')!.click();
+    root.querySelector<HTMLInputElement>('[data-abbrev-input]')!.value = '리크앨나프';
+    root.querySelector<HTMLButtonElement>('[data-abbrev-apply]')!.click();
+
+    const first = root.querySelector<HTMLSelectElement>('[data-abbrev-pick="리"] .abbrev-select')!;
+    first.value = '라피 : 레드 후드';
+    root.querySelector<HTMLButtonElement>('[data-abbrev-save]')!.click();
+
+    // 등록하면 곧바로 다시 풀어 편성까지 바꾼다.
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].squad[0]).toBe('라피 : 레드 후드');
+    const mine = JSON.parse(localStorage.getItem('nikke-abbrev-mine-v1')!) as
+      { rules: Array<{ key: string; names: string[] }> };
+    expect(mine.rules).toContainEqual({ key: '리', names: ['라피 : 레드 후드'] });
+    // 통째로도 남긴다 — 「이 다섯 글자는 이 편성」이 가장 쓸모 있는 기록이다.
+    expect(mine.rules.find((rule) => rule.key === '리크앨나프')?.names)
+      .toEqual(['라피 : 레드 후드', '크라운', '앨리스', '나가', '프리바티']);
+  });
+
+  it('sets breakthrough from the portrait star stepper and keeps the dropdown in sync', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const stepper = root.querySelector<HTMLElement>('[data-slot-card="0"] [data-growth-stepper]')!;
+    const minus = stepper.querySelector<HTMLButtonElement>('[data-growth-step="minus"]')!;
+    const plus = stepper.querySelector<HTMLButtonElement>('[data-growth-step="plus"]')!;
+    const filled = () => stepper.querySelectorAll('.growth-star.is-on').length;
+    const core = () => stepper.querySelector('.growth-core')?.textContent ?? null;
+
+    // 기본값 3돌: 별 3개, 진화 0. 아직 오버라이드가 없어 드롭다운도 없다.
+    expect(filled()).toBe(3);
+    expect(core()).toBe('0');
+    expect(root.querySelector('[data-slot-card="0"] [data-growth-stage]')).toBeNull();
+
+    // + 한 번 → 코강 1. 별 3개 + 동그라미 "1", 개별 설정 드롭다운이 생겨 값이 맞는다.
+    plus.click();
+    expect(filled()).toBe(3);
+    expect(core()).toBe('1');
+    expect(root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-growth-stage]')!.value).toBe('4');
+
+    // 바닥까지 내리면 명함(0): 채워진 별 0개, − 비활성.
+    // 진화 뱃지는 0으로 남는다 — 사라지면 별 줄 폭이 흔들린다.
+    for (let i = 0; i < 6; i += 1) minus.click();
+    expect(filled()).toBe(0);
+    expect(core()).toBe('0');
+    expect(minus.disabled).toBe(true);
+
+    // 기본값(3돌)으로 되돌리면 오버라이드가 사라져 드롭다운도 없어진다.
+    for (let i = 0; i < 3; i += 1) plus.click();
+    expect(filled()).toBe(3);
+    expect(root.querySelector('[data-slot-card="0"] [data-growth-stage]')).toBeNull();
+  });
+
+  it('keeps the star art from swallowing clicks on the stepper buttons', () => {
+    // 별·진화 그림은 칸보다 크게 그려 −/+ 위로 넘친다. pointer-events를 놓치면
+    // 버튼 한가운데가 안 눌린다 (유저 제보).
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const stepper = root.querySelector<HTMLElement>('[data-slot-card="0"] [data-growth-stepper]')!;
+    for (const decoration of ['.growth-stars', '.growth-star', '.growth-core']) {
+      expect(stepper.querySelector(decoration), decoration).not.toBeNull();
+    }
+    // jsdom은 pointer-events 캐스케이드를 계산하지 않는다 — 규칙 자체를 확인한다.
+    const css = readFileSync(join(import.meta.dirname, 'styles.css'), 'utf8');
+    expect(css).toMatch(
+      /\.growth-stars,\s*\.growth-star,\s*\.growth-core\s*\{\s*pointer-events:\s*none;/,
+    );
+  });
+
+  it('shows the element code icon on squad cards and roster cells', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    // 편성 카드는 좌상단 — 슬롯 번호와 한 줄에 선다.
+    const tags = root.querySelector<HTMLElement>('[data-slot-card="0"] .slot-tags')!;
+    expect(tags.querySelector('.slot-number')!.textContent).toBe('01');
+    // 리타는 철갑.
+    expect(tags.querySelector('.slot-code')!.className).toContain('is-iron');
+
+    // 고르기 판은 우상단. 전원에게 붙고 속성별로 갈린다.
+    const cells = [...root.querySelectorAll<HTMLElement>('[data-roster-cell]')];
+    expect(cells.length).toBeGreaterThan(0);
+    expect(cells.every((cell) => cell.querySelector('.roster-code'))).toBe(true);
+    const iconOf = (name: string) => root
+      .querySelector(`[data-roster-cell="${name}"] .roster-code`)!.className;
+    expect(iconOf('라피 : 레드 후드')).toContain('is-fire');     // 작열
+    expect(iconOf('앨리스')).toContain('is-water');              // 수냉
+    expect(iconOf('나가')).toContain('is-electronic');           // 전격
+  });
+
+  it('sends the optimal-range weapon types and restores them on reload', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    // 무기군 직접 선택은 구식 적정거리다(처음 쓰는 사람은 신식).
+    root.querySelector<HTMLInputElement>('[data-range-model][value="legacy"]')!.click();
+
+    // 기본은 아무 무기군도 적정거리가 아니다 — 요청에서 아예 빠진다.
+    // 런처는 인게임에 적정 사거리가 없어 칸 자체가 없다.
+    const boxes = [...root.querySelectorAll<HTMLInputElement>('[data-optimal-range-weapon]')];
+    expect(boxes.map((box) => box.dataset.optimalRangeWeapon))
+      .toEqual(['AR', 'SMG', 'SG', 'MG', 'SR']);
+    expect(boxes.every((box) => !box.checked)).toBe(true);
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.optimalRangeWeapons).toBeUndefined();
+
+    // 여러 개를 함께 켤 수 있다.
+    const check = (weapon: string) => {
+      const box = root.querySelector<HTMLInputElement>(`[data-optimal-range-weapon="${weapon}"]`)!;
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    check('SG');
+    check('AR');
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    // 고른 순서와 무관하게 정렬돼 실린다 — 같은 설정이 다른 캐시 키를 만들지 않게.
+    expect(client.lastRequest?.optimalRangeWeapons).toEqual(['AR', 'SG']);
+
+    // 새로고침해도 남는다.
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const restored = [...root.querySelectorAll<HTMLInputElement>('[data-optimal-range-weapon]')]
+      .filter((box) => box.checked)
+      .map((box) => box.dataset.optimalRangeWeapon);
+    expect(restored).toEqual(['AR', 'SG']);
+  });
+
+  it('keeps buff targets across a reload, and drops them when the squad changes', async () => {
+    // 수령자는 실제 발동 로그에서 오므로 계산 전에는 알 수 없다. 새로고침할 때마다
+    // 빈 괄호로 돌아가면 기능이 꺼진 것처럼 보이므로 저장했다가 되살린다.
+    const withTargets: SimulationResult = {
+      ...calculated,
+      buffTargets: { 리타: [{ label: '크확 대상', buff: '웨이크업! 4', targets: ['크라운'], count: 3 }] },
+    };
+    class TargetClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return withTargets;
+      }
+    }
+    // 리타는 기본 편성 1번 칸에 있다 — 감시 대상으로 잡아 둔 캐릭터다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new TargetClient(), storage: localStorage });
+    const shown = () => root.querySelector<HTMLElement>('[data-buff-target]')?.textContent;
+    expect(shown()).toBe('크확 대상 : []');
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+    expect(shown()).toBe('크확 대상 : [크라운]');
+
+    // 새로 마운트해도(=새로고침) 남는다.
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(shown()).toBe('크확 대상 : [크라운]');
+
+    // 편성을 바꾸면 지난 계산의 값이라 그대로 믿을 수 없다 — 비운다.
+    chooseCharacter(root, 1, '프리바티');
+    expect(shown()).toBe('크확 대상 : []');
+  });
+
+  const chip = (root: HTMLElement, key: string, value: string) =>
+    root.querySelector<HTMLButtonElement>(`[data-filter-chip="${key}:${value}"]`)!;
+
+  it('filters the picker down to SSR only', () => {
+    // SR·R은 실전에서 거의 안 쓴다 — 목록에서 걷어낸다(유저 피드백).
+    const withSR: SettingsCatalog = {
+      ...settings,
+      characters: { ...settings.characters, 나가: { ...settings.characters.나가!, rarity: 'SR' } },
+    };
+    mountCalculator(root, { catalog, settings: withSR, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(rosterNames(root)).toContain('나가');
+    chip(root, 'rarity', 'SSR').click();
+    expect(rosterNames(root)).not.toContain('나가');
+    // 같은 칩을 다시 누르면 꺼진다 — 「전체」 칩이 따로 없다.
+    chip(root, 'rarity', 'SSR').click();
+    expect(rosterNames(root)).toContain('나가');
+  });
+
+  it('ORs within a filter group and ANDs across groups', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    // 무기 둘을 켜면 둘 중 하나면 통과한다(그룹 안 OR).
+    chip(root, 'weapon', 'SR').click();
+    chip(root, 'weapon', 'AR').click();
+    expect(rosterNames(root).sort()).toEqual(['앨리스', '프리바티']);
+
+    // 거기에 속성을 더하면 둘 다 만족해야 한다(그룹 사이 AND).
+    chip(root, 'code', '수냉').click();
+    expect(rosterNames(root).sort()).toEqual(['앨리스', '프리바티']);
+    chip(root, 'code', '수냉').click();
+    chip(root, 'code', '작열').click();
+    expect(rosterNames(root)).toEqual([]);
+  });
+
+  it('counts the active filters and clears them all at once', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const badge = root.querySelector<HTMLElement>('[data-filter-badge]')!;
+    const reset = root.querySelector<HTMLButtonElement>('[data-filter-reset]')!;
+    expect(badge.hidden).toBe(true);
+    expect(reset.hidden).toBe(true);
+
+    chip(root, 'weapon', 'SR').click();
+    chip(root, 'class', '화력형').click();
+    expect(badge.textContent).toBe('2');
+    expect(reset.hidden).toBe(false);
+
+    reset.click();
+    expect(badge.hidden).toBe(true);
+    expect(rosterNames(root).length).toBe(catalog.length);
+  });
+
+  it('sorts by overload value, breaking ties by name', () => {
+    // 우월코드·우공합은 «내 로스터에서 얼마나 굴려졌나»를 보는 척도다.
+    const over = (element: number, atk: number) => ({
+      element_bonus: element, atk_pct: atk, max_ammo_pct: 0, crit_rate: 0, crit_dmg: 0,
+    });
+    const tuned: SettingsCatalog = {
+      ...settings,
+      characters: {
+        ...settings.characters,
+        리타: { ...settings.characters.리타!, overload: over(10, 90) },
+        앨리스: { ...settings.characters.앨리스!, overload: over(50, 0) },
+        나가: { ...settings.characters.나가!, overload: over(30, 5) },
+      },
+    };
+    mountCalculator(root, { catalog, settings: tuned, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    // 기본은 이름순.
+    expect(rosterNames(root)).toEqual([...rosterNames(root)].sort((a, b) => a.localeCompare(b, 'ko')));
+
+    root.querySelector<HTMLButtonElement>('[data-sort="element"]')!.click();
+    const byElement = rosterNames(root);
+    expect(byElement.indexOf('앨리스')).toBeLessThan(byElement.indexOf('나가'));
+    expect(byElement.indexOf('나가')).toBeLessThan(byElement.indexOf('리타'));
+
+    // 우공합은 공증까지 더하므로 리타(10+90=100)가 앨리스(50)를 앞선다.
+    root.querySelector<HTMLButtonElement>('[data-sort="elementAtk"]')!.click();
+    const bySum = rosterNames(root);
+    expect(bySum.indexOf('리타')).toBeLessThan(bySum.indexOf('앨리스'));
+  });
+
+  it('flips the sort when the same option is clicked again, and shows which way', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const sortChip = (key: string) =>
+      root.querySelector<HTMLButtonElement>(`[data-sort="${key}"]`)!;
+
+    // 이름은 오름차순으로 시작한다.
+    sortChip('name').click();
+    expect(sortChip('name').dataset.sortDir).toBe('asc');
+    expect(sortChip('name').textContent).toContain('▲');
+    const asc = rosterNames(root);
+
+    // 같은 항목을 다시 누르면 뒤집힌다.
+    sortChip('name').click();
+    expect(sortChip('name').dataset.sortDir).toBe('desc');
+    expect(sortChip('name').textContent).toContain('▼');
+    expect(rosterNames(root)).toEqual([...asc].reverse());
+
+    // 수치 항목은 «높은 순»으로 시작한다 — 항목마다 자연스러운 방향이 다르다.
+    sortChip('element').click();
+    expect(sortChip('element').dataset.sortDir).toBe('desc');
+    // 켜지지 않은 항목에는 삼각형이 없다.
+    expect(sortChip('name').textContent).not.toContain('▲');
+    expect(sortChip('name').textContent).not.toContain('▼');
+  });
+
+  it('opens on combat power, standing by name until the engine answers', async () => {
+    // 전투력은 엔진이 계산해 온다. 그 사이에도 목록은 쓸 수 있어야 한다.
+    // 전투력은 **두 곳에서** 묻는다 — 목록 정렬용(카탈로그 전체)과 편성 카드용(덱 5명).
+    // 마지막 요청만 기억하면 어느 쪽이 늦게 오느냐에 따라 시험이 흔들린다.
+    // 요청을 전부 모아 두고, 정렬용(카탈로그 전체)만 골라 답한다.
+    const asked: Array<{ names: string[]; resolve: (p: Record<string, number>) => void }> = [];
+    class PowerClient extends FakeClient {
+      async combatPower(request: CombatPowerRequest): Promise<Record<string, number>> {
+        return new Promise((resolve) => { asked.push({ names: request.names, resolve }); });
+      }
+    }
+    const client = new PowerClient();
+    const catalogNames = catalog.map((meta) => meta.name);
+    const answer = (power: Record<string, number>) => {
+      const forSort = asked.find(
+        (call) => JSON.stringify(call.names) === JSON.stringify(catalogNames));
+      if (!forSort) throw new Error(`정렬용 요청이 없다: ${JSON.stringify(asked.map((c) => c.names))}`);
+      forSort.resolve(power);
+    };
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    const summary = () => root.querySelector<HTMLElement>('[data-filter-summary]')!.textContent;
+
+    expect(root.querySelector<HTMLButtonElement>('[data-sort="power"]')!.dataset.sortDir).toBe('desc');
+    // 오는 동안은 이름순으로 서 있고, 요약이 기다리는 중임을 알린다.
+    expect(summary()).toContain('전투력 계산중');
+    expect(rosterNames(root)).toEqual([...rosterNames(root)].sort((a, b) => a.localeCompare(b, 'ko')));
+
+    await flush();
+    // 목록 정렬은 카탈로그 전체를 묻는다. 편성 카드용 요청(덱 5명)과 섞지 않는다.
+    expect(asked.map((call) => call.names)).toContainEqual(catalogNames);
+    answer({ 나가: 30, 리타: 10, 앨리스: 50 });
+    await flush();
+
+    expect(summary()).toContain('전투력 ▼');
+    const byPower = rosterNames(root);
+    expect(byPower.indexOf('앨리스')).toBeLessThan(byPower.indexOf('나가'));
+    expect(byPower.indexOf('나가')).toBeLessThan(byPower.indexOf('리타'));
+  });
+
+  it('lays the filter panel over the list and closes it like a dropdown', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const open = root.querySelector<HTMLButtonElement>('[data-filter-open]')!;
+    const panel = root.querySelector<HTMLElement>('[data-filter-panel]')!;
+    const scroll = root.querySelector<HTMLElement>('.picker-scroll')!;
+
+    // 판과 목록이 같은 자리 컨테이너에 나란히 있어야 판을 목록 «위에» 얹을 수 있다.
+    expect(panel.parentElement).toBe(scroll.parentElement);
+    expect(panel.parentElement!.classList.contains('picker-body')).toBe(true);
+
+    expect(panel.hidden).toBe(true);
+    open.click();
+    expect(panel.hidden).toBe(false);
+
+    // 판 안과 판을 여는 줄은 «바깥»이 아니다 — 눌러도 닫히지 않는다.
+    panel.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    root.querySelector<HTMLElement>('.picker-bar')!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(panel.hidden).toBe(false);
+
+    // 바깥을 누르면 닫힌다.
+    scroll.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(panel.hidden).toBe(true);
+    expect(open.getAttribute('aria-expanded')).toBe('false');
+
+    // Esc로도 닫힌다.
+    open.click();
+    expect(panel.hidden).toBe(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel.hidden).toBe(true);
+  });
+
+  it('keeps burst chips outside the panel, next to the button that opens it', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const bar = root.querySelector<HTMLElement>('.picker-bar')!;
+    const burst = [...bar.querySelectorAll<HTMLButtonElement>('[data-burst-group] .filter-chip')];
+    expect(burst.map((chipEl) => chipEl.textContent)).toEqual(['B1', 'B2', 'B3', 'BA']);
+    // 판 안에는 더 이상 버스트가 없다.
+    expect(root.querySelector('[data-filter-groups] [data-filter-chip^="burst"]')).toBeNull();
+
+    // 판을 펼치지 않고 바로 걸린다.
+    expect(root.querySelector<HTMLElement>('[data-filter-panel]')!.hidden).toBe(true);
+    const b3 = catalog.filter((meta) => meta.burstStage === '3').map((meta) => meta.name);
+    chip(root, 'burst', '3').click();
+    expect(rosterNames(root).sort()).toEqual([...b3].sort());
+    expect(root.querySelector('[data-filter-badge]')!.textContent).toBe('1');
+    expect(root.querySelector('[data-filter-summary]')!.textContent).toContain('B3');
+
+    chip(root, 'burst', '3').click();
+    expect(rosterNames(root).length).toBe(catalog.length);
+  });
+
+  it('코드 필터는 판 밖, 버스트와 같은 줄 오른쪽 끝에 아이콘으로 선다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const bar = root.querySelector<HTMLElement>('.picker-bar')!;
+    const group = bar.querySelector<HTMLElement>('[data-code-group]')!;
+    // 줄의 맨 끝 — 오른쪽 끝에 붙는다.
+    expect(bar.lastElementChild).toBe(group);
+    const chips = [...group.querySelectorAll<HTMLButtonElement>('.filter-chip')];
+    expect(chips.map((c) => c.dataset.filterChip)).toEqual(
+      ['code:작열', 'code:수냉', 'code:풍압', 'code:전격', 'code:철갑']);
+    // 글자 대신 아이콘, 이름은 접근성 라벨로 남는다.
+    for (const c of chips) {
+      expect(c.textContent).toBe('');
+      expect(c.querySelector('.element-icon')).not.toBeNull();
+    }
+    expect(chips[0]!.getAttribute('aria-label')).toBe('작열');
+    // 판 안에는 더 이상 코드가 없다.
+    expect(root.querySelector('[data-filter-groups] [data-filter-chip^="code"]')).toBeNull();
+
+    // 판을 펼치지 않고 바로 걸린다.
+    const iron = catalog.filter((meta) => meta.elementCode === '철갑').map((meta) => meta.name);
+    chip(root, 'code', '철갑').click();
+    expect(rosterNames(root).sort()).toEqual([...iron].sort());
+    expect(root.querySelector('[data-filter-badge]')!.textContent).toBe('1');
+    expect(root.querySelector('[data-filter-summary]')!.textContent).toContain('철갑');
+    chip(root, 'code', '철갑').click();
+    expect(rosterNames(root).length).toBe(catalog.length);
+  });
+
+  it('애장품 필터로 목록을 가른다', () => {
+    // 한 번 «안 쓰인다»고 뺐던 칸인데, 쓰는 사람이 달라고 해서 되살렸다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const titles = [...root.querySelectorAll('[data-filter-groups] .filter-title')]
+      .map((title) => title.textContent);
+    expect(titles).toEqual(['등급', '클래스', '무기', '기업', '애장품']);
+
+    const before = root.querySelectorAll('[data-roster-cell]').length;
+    root.querySelector<HTMLButtonElement>('[data-filter-chip="item:있음"]')!.click();
+    const withItem = [...root.querySelectorAll<HTMLElement>('[data-roster-cell]')]
+      .map((cell) => cell.dataset.rosterCell!);
+    expect(withItem.length).toBeLessThan(before);
+    for (const name of withItem) expect(settings.characters[name]?.favoriteItem).toBeTruthy();
+  });
+
+  it.each(['remove', 'replace'])('닫힌 편성 화면(%s)은 예약된 미리 계산을 실행하지 않는다', async (action) => {
+    vi.useFakeTimers();
+    try {
+      const client = new FakeClient();
+      mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+      if (action === 'remove') root.remove(); else root.replaceChildren();
+      await vi.advanceTimersByTimeAsync(800);
+      expect(client.simulateCalls).toBe(0);
+    } finally {
+      vi.clearAllTimers(); vi.useRealTimers();
+    }
+  });
+
+  it('빠른덱편성은 순서대로 채우고 다른 덱 중복과 필터를 유지한다', () => {
+    localStorage.setItem('nikke-state-v1', JSON.stringify({ fiveDeckMode: true, activeDeckId: 1,
+      decks: [1, 2].map(id => ({ id, squad: ['', '', '', '', ''], characters: {} })) }));
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-quick-decks-open]')!.click();
+    const modal = root.querySelector<HTMLElement>('[data-quick-decks-modal]')!;
+    expect(modal.hidden).toBe(false);
+    expect(modal.querySelector('[data-filter-open]')).not.toBeNull();
+    const filter = modal.querySelector<HTMLButtonElement>('[data-filter-chip="burst:1"]')!;
+    filter.focus(); filter.click();
+    expect(document.activeElement).toBe(modal.querySelector('[data-roster-search]'));
+    modal.querySelector<HTMLButtonElement>('[data-filter-chip="burst:1"]')!.click();
+    const names = catalog.slice(0, 5).map(c => c.name);
+    for (const name of names) modal.querySelector<HTMLButtonElement>(`[data-roster-cell="${name}"]`)!.click();
+    const repeat = modal.querySelector<HTMLButtonElement>(`[data-roster-cell="${names[0]}"]`)!;
+    expect(repeat.disabled).toBe(false);
+    repeat.click();
+    const decks = JSON.parse(localStorage.getItem('nikke-state-v1')!).decks;
+    expect(decks[0].squad).toEqual(names);
+    expect(decks[1].squad[0]).toBe(names[0]);
+    const badges = modal.querySelectorAll(`[data-roster-cell="${names[0]}"] [data-quick-deck-badge]`);
+    expect([...badges].map(b => b.textContent)).toEqual(['1', '2']);
+    expect(document.activeElement).toBe(modal.querySelector('[data-roster-search]'));
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(modal.hidden).toBe(true);
+    expect(root.querySelector('[data-picker]')!.closest('[data-quick-decks-modal]')).toBeNull();
+  });
+
+  it('persists spatial settings and supports immediate legacy rollback', () => {
+    const cleanup = mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLSelectElement>('#shotgun-model')!;
+    const size = root.querySelector<HTMLSelectElement>('#boss-size')!;
+    const diameter = root.querySelector<HTMLInputElement>('#shotgun-target-diameter')!;
+    expect(mode.value).toBe('spatial-v1');
+    size.value = 'small'; size.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(diameter.value).toBe('120');
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle).toMatchObject({ shotgunModel: 'spatial-v1', shotgunTargetDiameter: 120 });
+    cleanup();
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const restored = root.querySelector<HTMLSelectElement>('#shotgun-model')!;
+    expect(restored.value).toBe('spatial-v1');
+    restored.value = 'legacy'; restored.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(root.querySelector<HTMLInputElement>('#shotgun-target-diameter')!.closest('label')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLInputElement>('#shotgun-hit-rate')!.closest('label')!.hidden).toBe(false);
+  });
+
+  it('persists boss presets and custom pellet probability', () => {
+    const cleanup = mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLSelectElement>('#shotgun-model')!;
+    mode.value = 'legacy'; mode.dispatchEvent(new Event('change', { bubbles: true }));
+    const size = root.querySelector<HTMLSelectElement>('#boss-size')!;
+    const rate = root.querySelector<HTMLInputElement>('#shotgun-hit-rate')!;
+    expect(size.value).toBe('large'); expect(rate.disabled).toBe(true);
+    size.value = 'medium'; size.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(rate.value).toBe('90');
+    size.value = 'small'; size.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(rate.value).toBe('80');
+    size.value = 'custom'; size.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(rate.disabled).toBe(false);
+    rate.value = '73.5'; rate.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle).toMatchObject({ bossSize: 'custom', shotgunHitRate: .735 });
+    cleanup();
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLInputElement>('#shotgun-hit-rate')!.value).toBe('73.5');
+    expect(root.querySelector<HTMLSelectElement>('#boss-size')!.value).toBe('custom');
+  });
+
+  it('persists size windows and migrates missing first burst as zero', () => {
+    const cleanup = mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-phase-add="size"]')!.click();
+    const diameter = root.querySelector<HTMLInputElement>('[aria-label="보스 크기 1 직경"]')!;
+    diameter.value = '120'; diameter.dispatchEvent(new Event('input', { bubbles: true }));
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!);
+    expect(saved.battle.shotgunSizeWindows).toEqual([{ from: 0, to: 2, diameter: 120 }]);
+    delete saved.battle.firstBurstTime; localStorage.setItem('nikke-state-v1', JSON.stringify(saved));
+    cleanup();
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLInputElement>('#first-burst')!.value).toBe('0');
+    expect(root.querySelector<HTMLInputElement>('[aria-label="보스 크기 1 직경"]')!.value).toBe('120');
+  });
+
+  it('persists common and deck-specific first burst settings', () => {
+    const cleanup = mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const input = root.querySelector<HTMLInputElement>('#first-burst')!;
+    expect(input.value).toBe('3');
+    input.value = '4'; input.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLInputElement>('#first-burst-per-deck')!.click();
+    const own = root.querySelector<HTMLInputElement>('[data-deck-first-burst-input="1"]')!;
+    own.value = '7.5'; own.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).battle).toMatchObject({ firstBurstTime: 4, firstBurstPerDeck: { 1: 7.5 } });
+    cleanup();
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLInputElement>('#first-burst')!.value).toBe('4');
+    expect(root.querySelector<HTMLInputElement>('[data-deck-first-burst-input="1"]')!.value).toBe('7.5');
+  });
+
+  it('6덱 공유를 적용해도 기존 덱별 전투 조건을 보존한다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLInputElement>('#core-per-deck')!.click();
+    root.querySelector<HTMLInputElement>('[data-deck-core-input="1"]')!.click();
+    root.querySelector<HTMLInputElement>('#burst-regen-per-deck')!.click();
+    const regen = root.querySelector<HTMLInputElement>('[data-deck-regen-input="1"]')!;
+    regen.value = '7'; regen.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLButtonElement>('[data-share-open]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-share-scope-pick="all"]')!.click();
+    root.querySelector<HTMLTextAreaElement>('[data-share-in]')!.value = encodeShareCode(
+      Array.from({ length: 6 }, (_, i) => ({ id: i + 1, squad: ['리타', '', '', '', ''], characters: {} })), true);
+    root.querySelector<HTMLButtonElement>('[data-share-apply]')!.click();
+    expect(root.querySelectorAll('[data-deck-tab]')).toHaveLength(6);
+    expect(root.querySelector<HTMLInputElement>('[data-deck-core-input="1"]')!.checked).toBe(true);
+    expect(root.querySelector<HTMLInputElement>('[data-deck-regen-input="1"]')!.value).toBe('7');
+  });
+
+  it('여러덱 모드는 두 덱부터 추가하고 6덱을 저장·복원·계산한다', async () => {
+    const client = new FakeClient();
+    const deps = { catalog, settings: { ...settings, buffTargetWatch: {} }, version: 'v1', client, storage: localStorage };
+    mountCalculator(root, deps);
+    root.querySelector<HTMLInputElement>('#squad-mode')!.click();
+    expect(root.querySelectorAll('[data-deck-tab]')).toHaveLength(2);
+    for (let i = 0; i < 4; i += 1) root.querySelector<HTMLButtonElement>('[data-deck-add]')!.click();
+    expect(root.querySelectorAll('[data-deck-tab]')).toHaveLength(6);
+    chooseCharacter(root, 0, '리타');
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+    expect(client.requests).toHaveLength(2);
+    expect(root.querySelector('[data-deck-result-tab="6"]')).not.toBeNull();
+    root.replaceChildren();
+    mountCalculator(root, { ...deps, client: new FakeClient() });
+    expect(root.querySelectorAll('[data-deck-tab]')).toHaveLength(6);
+    expect(root.querySelector('[data-deck-tab="6"]')!.classList.contains('is-active')).toBe(true);
+    const remove = root.querySelector<HTMLButtonElement>('[data-deck-remove]')!;
+    remove.click(); remove.click();
+    expect(root.querySelectorAll('[data-deck-tab]')).toHaveLength(5);
+  });
+
+  it('여러 덱 타임라인을 견주고 개별 상세로 돌아간다', async () => {
+    const client = new FakeClient();
+    client.simulate = async () => ({ ...calculated, timeline: {
+      bucket: 1, buckets: 2, damage: { 리타: [100, 200] }, bursts: {}, fullBurst: [],
+    } });
+    mountCalculator(root, { catalog, settings: { ...settings, buffTargetWatch: {} }, version: 'v1', client, storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(root, 0, '리타');
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+    const compare = root.querySelector<HTMLButtonElement>('[data-timeline-tab="0"]')!;
+    expect(compare.parentElement!.textContent).toContain('덱끼리 견주기');
+    compare.click();
+    expect((compare as unknown as HTMLInputElement).checked).toBe(true);
+    expect(root.querySelector('[data-timeline-stage] [data-timeline-comparison]')).not.toBeNull();
+    expect(root.querySelectorAll('[data-timeline-comparison] [data-series]')).toHaveLength(2);
+    root.querySelector<HTMLButtonElement>('[data-timeline-tab="2"]')!.click();
+    expect(root.querySelector('[data-timeline-stage] [data-timeline="2"]')).not.toBeNull();
+    expect(root.querySelectorAll('[data-timeline-stage] [data-timeline]')).toHaveLength(3);
+    compare.click();
+    expect(root.querySelector('[data-timeline-stage] [data-timeline-comparison]')).toBeNull();
+    expect(root.querySelectorAll('[data-timeline-stage] [data-timeline]')).toHaveLength(2);
+  });
+
+  it('풀버스트 요약에서 전투 종료로 잘린 마지막 구간을 표시한다', async () => {
+    const client = new FakeClient();
+    client.simulate = async () => ({ ...calculated, timeline: {
+      bucket: 1, buckets: 2, damage: { 리타: [100, 200] }, bursts: {}, fullBurst: [[1, 2]],
+      fullBurstSummary: { count: 1, lastStart: 1, lastDuration: 1, lastPlannedDuration: 10, lastTruncated: true },
+    } });
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const summary = root.querySelector('[data-full-burst-summary]')!;
+    expect(summary.textContent).toContain('풀버스트 1회');
+    expect(summary.textContent).toContain('실제 지속 1.00초');
+    expect(summary.textContent).toContain('전투 종료로 단축');
+    expect(summary.classList.contains('is-truncated')).toBe(true);
+  });
+
+  it('0.1초 버킷에서도 고정 Y축 상한은 그래프와 같은 단위를 쓴다', async () => {
+    const client = new FakeClient();
+    client.simulate = async () => ({ ...calculated, timeline: {
+      bucket: 0.1, buckets: 2, damage: { 리타: [100, 200] }, bursts: {}, fullBurst: [],
+    } });
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(root.querySelector<HTMLInputElement>('[data-timeline-y-max]')!.value).toBe('200');
+  });
+
+  it.each([873, 400])('계정 싱크로 %i와 400을 전환하고 재동기화·새로고침 후에도 선택을 유지한다', async (initialLevel) => {
+    let syncedLevel: number | null = initialLevel;
+    vi.stubGlobal('fetch', async () => Response.json({
+      openid: '12345678901234567890',
+      areas: [{ area: 84, characters: [{ name_code: 5001, grade: 0, core: 0 }],
+        details: [{ name_code: 5001 }], stateEffects: [], outpost: { synchro_level: syncedLevel } }],
+    }));
+    const client = new FakeClient();
+    const deps = { catalog: catalog.map((entry) => ({ ...entry, nameCode: entry.name === '리타' ? 5001 : null })),
+      settings, version: `synchro-${initialLevel}`, client, storage: localStorage, blablaProxy: 'https://proxy.example' };
+    let unmount = mountCalculator(root, deps);
+    const toggle = () => root.querySelector<HTMLInputElement>('[data-account-synchro]')!;
+    const level = () => root.querySelector<HTMLInputElement>('#synchro-level')!.value;
+    expect(toggle()?.disabled).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-blabla-open]')!.click();
+    root.querySelector<HTMLInputElement>('[data-blabla-url]')!.value =
+      'https://www.blablalink.com/user?openid=12345678901234567890';
+    root.querySelector<HTMLButtonElement>('[data-blabla-sync]')!.click();
+    await flush(); await flush();
+    expect(toggle().disabled).toBe(false);
+    expect(toggle().checked).toBe(true);
+    expect(level()).toBe(String(initialLevel));
+    toggle().click();
+    expect(level()).toBe('400');
+    syncedLevel = 900;
+    root.querySelector<HTMLButtonElement>('[data-blabla-refresh]')!.click();
+    await flush(); await flush();
+    expect(level()).toBe('400');
+    syncedLevel = null;
+    root.querySelector<HTMLButtonElement>('[data-blabla-refresh]')!.click();
+    await flush(); await flush();
+    unmount(); root.replaceChildren();
+    unmount = mountCalculator(root, deps);
+    syncedLevel = 900;
+    root.querySelector<HTMLButtonElement>('[data-blabla-refresh]')!.click();
+    await flush(); await flush();
+    expect(toggle().checked).toBe(false);
+    expect(level()).toBe('400');
+    toggle().click();
+    expect(level()).toBe('900');
+    root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    await vi.waitFor(() => expect(client.lastRequest?.synchroLevel).toBe(900));
+    unmount();
+  });
+
+  it('sends the synchro level from the battle panel, and keeps it out of shared codes', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    const level = root.querySelector<HTMLInputElement>('#synchro-level')!;
+    // 기본은 엔진 기본 스펙과 같은 400이다.
+    expect(level.value).toBe('400');
+
+    level.value = '250';
+    level.dispatchEvent(new Event('input', { bubbles: true }));
+    root.querySelector<HTMLFormElement>('form')!.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(client.lastRequest?.synchroLevel).toBe(250);
+
+    // 공유 코드에는 담기지 않는다 — 콘솔과 같은 계정 육성 상태다.
+    root.querySelector<HTMLButtonElement>('[data-battle-share-open]')!.click();
+    const code = root.querySelector<HTMLTextAreaElement>('[data-battle-share-out]')!.value;
+    root.querySelector<HTMLTextAreaElement>('[data-battle-share-in]')!.value = code;
+    level.value = '700';
+    root.querySelector<HTMLButtonElement>('[data-battle-share-apply]')!.click();
+    // 남의 조건을 얹어도 내 레벨은 그대로다.
+    expect(root.querySelector<HTMLInputElement>('#synchro-level')!.value).toBe('700');
+  });
+
+  it('커뮤니티 안내 띠는 닫을 때까지 올 때마다 보인다', () => {
+    // 업데이트 공지와 달리 **모달이 아니다** — 지나쳐도 다시 보여야 하는 알림이라
+    // 머리에 붙여 두고, 닫은 사람에게만 걷는다.
+    const campaign = { id: 'test-campaign', text: '테스트 안내', linkLabel: '안내 보기', href: 'https://example.com/' };
+    ANNOUNCEMENTS.push(campaign);
+    const remount = () => {
+      root.remove();
+      root = document.createElement('main');
+      document.body.append(root);
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      return root.querySelector<HTMLElement>('[data-campaign]')!;
+    };
+
+    let band = remount();
+    expect(band.hidden).toBe(false);
+    expect(band.querySelector('[data-campaign-text]')!.textContent).toBe(campaign.text);
+    const link = band.querySelector<HTMLAnchorElement>('[data-campaign-link]')!;
+    expect(link.href).toBe(campaign.href);
+    // 새 창으로 열고 우리 쪽을 넘겨주지 않는다.
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toContain('noopener');
+
+    // 업데이트 공지를 닫아도 띠는 남는다 — 서로 다른 알림이다.
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')!.click();
+    expect(band.hidden).toBe(false);
+
+    band = remount();
+    expect(band.hidden).toBe(false);
+
+    band.querySelector<HTMLButtonElement>('[data-campaign-close]')!.click();
+    expect(band.hidden).toBe(true);
+    expect(localStorage.getItem('nikke-announcement-seen')).toBe(campaign.id);
+
+    expect(remount().hidden).toBe(true);
+    ANNOUNCEMENTS.pop();
+  });
+
+  it('shows the update notice once, and not again after it is closed', () => {
+    // 처음 온 사람에게는 뜬다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const modal = () => root.querySelector<HTMLElement>('[data-notice-modal]')!;
+    expect(modal().hidden).toBe(false);
+    expect(root.querySelectorAll('[data-notice]').length).toBeGreaterThan(0);
+
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')!.click();
+    expect(modal().hidden).toBe(true);
+    expect(localStorage.getItem('nikke-notice-seen')).toBe(LATEST_NOTICE_ID);
+
+    // 다시 들어와도 뜨지 않는다.
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLElement>('[data-notice-modal]')!.hidden).toBe(true);
+    // 그래도 언제든 다시 열어 볼 수 있다.
+    root.querySelector<HTMLButtonElement>('[data-notice-open]')!.click();
+    expect(root.querySelector<HTMLElement>('[data-notice-modal]')!.hidden).toBe(false);
+  });
+
+  it('shows the notice again when a newer one is published', () => {
+    // 옛 공지까지만 본 사람에게는 새 공지가 다시 뜬다.
+    localStorage.setItem('nikke-notice-seen', '2000-01-01');
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLElement>('[data-notice-modal]')!.hidden).toBe(false);
+  });
+
+  it('다중 덱 탭과 캐릭터 수치는 자세히 보기 설정을 함께 따른다', async () => {
+    class BigClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return { ...calculated, squadTotal: 124_381_927, charTotals: { 리타: 124_381_927 } };
+      }
+    }
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new BigClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(root, 0, '리타');
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush(); await flush();
+    const total = () => root.querySelector('.result-row-total')!.textContent;
+    const tab = () => root.querySelector('[data-deck-result-tab="2"] > span')!.textContent;
+    expect(total()).toMatch(/억$/);
+    expect(tab()).toMatch(/억$/);
+    root.querySelector<HTMLInputElement>('[data-detail-damage]')!.click();
+    expect(total()).toBe('124,381,927');
+    expect(tab()).toBe('124,381,927');
+  });
+
+  it('MCP 사용법을 편의 기능 내부에서 열고 다른 도구로 돌아간다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-view-tab="fun"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="mcp"]')!.click();
+    expect(root.querySelector('[data-mcp-guide]')?.textContent).toContain('ChatGPT');
+    expect(root.querySelector('[data-mcp-guide]')?.textContent).toContain('Claude');
+    expect(root.querySelector<HTMLInputElement>('[data-mcp-url]')?.value).toBe('https://nikke-calc-mcp.onrender.com/mcp');
+    root.querySelector<HTMLButtonElement>('[data-fun-tab="skills"]')!.click();
+    expect(root.querySelector('[data-mcp-guide]')).toBeNull();
+  });
+
+  it('자세히 보기를 켜면 대미지를 1의 자리까지 적는다', async () => {
+    // 「1.24억」은 견주기에 좋지만 두 덱이 같은 글자로 보이는 일이 있다.
+    // 줄여 쓰기는 백만이 넘어야 시작되므로, 그 위의 수치를 내는 대역으로 잰다.
+    const big: SimulationResult = {
+      ...calculated,
+      squadTotal: 124_381_927,
+      charTotals: {
+        리타: 60_000_000, 크라운: 30_000_000, '라피 : 레드 후드': 20_000_000,
+        앨리스: 10_000_000, 나가: 4_381_927,
+      },
+    };
+    class BigClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return big;
+      }
+    }
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new BigClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')!.click();
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+
+    // 이 대역의 총딜(123,456)은 줄여 쓰는 문턱 아래라 두 표기가 같다. 자세히 보기가
+    // 실제로 갈리는 자리는 억 단위가 넘는 캐릭터별 수치이므로 그쪽을 본다.
+    const rowTotal = () => root.querySelector<HTMLElement>('.result-row-total, .result-cards strong')?.textContent ?? '';
+    const box = root.querySelector<HTMLInputElement>('[data-detail-damage]')!;
+    expect(box.checked).toBe(false);
+    const short = rowTotal();
+    expect(short).toMatch(/억$/);                  // 켜기 전에는 줄여 쓴다
+    box.click();
+    const exact = rowTotal();
+    expect(exact).not.toBe(short);
+    expect(exact).toMatch(/^[\d,]+$/);            // 쉼표만 든 정수 — 「억」이 붙지 않는다
+    expect(Number(exact.replace(/,/g, ''))).toBeGreaterThan(0);
+
+    // 켠 상태는 남는다 — 다시 열어도 그 눈으로 본다.
+    expect(localStorage.getItem('nikke-detail-damage-v1')).toBe('1');
+    root.querySelector<HTMLInputElement>('[data-detail-damage]')!.click();
+    expect(rowTotal()).toBe(short);
+    expect(localStorage.getItem('nikke-detail-damage-v1')).toBe('0');
+  });
+
+  it('keeps the control fold open and live inside the card', async () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')!.click();
+    const card = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    card.querySelector<HTMLInputElement>('[data-custom-toggle]')!.click();
+    card.querySelector<HTMLButtonElement>('[data-control-open]')!.click();
+
+    // 컨트롤은 창으로 나가지 않는다 — 카드 안에서 펴진다.
+    expect(root.querySelector('[data-char-panel-body] [data-control-mode]')).toBeNull();
+    const inCard = (selector: string) =>
+      root.querySelector<HTMLInputElement>(`[data-slot-card="0"] ${selector}`);
+    expect(inCard('[data-control-panel]')!.hidden).toBe(false);
+    // 처음엔 «추천 자동 적용»이라 체크박스가 잠겨 있다.
+    expect(inCard('[data-control="reload"]')!.disabled).toBe(true);
+
+    // «직접 설정»을 고르면 카드가 다시 그려진다 — 펴 둔 판은 그대로 살아 있어야 한다.
+    inCard('[data-control-mode="manual"]')!.click();
+    await Promise.resolve();
+    expect(inCard('[data-control-panel]')!.hidden).toBe(false);
+    expect(inCard('[data-control="reload"]')!.disabled).toBe(false);
+    // 그리고 그 체크박스가 실제로 먹는다.
+    inCard('[data-control="reload"]')!.click();
+    await Promise.resolve();
+    expect(inCard('[data-control="reload"]')!.checked).toBe(true);
+  });
+
+  it('does not yank the page back to the squad when results arrive', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-notice-dismiss]')!.click();
+    // jsdom에는 scrollIntoView가 없다 — 누가 불렀는지 보려고 심는다.
+    const pulled: string[] = [];
+    const proto = Element.prototype as unknown as { scrollIntoView?: () => void };
+    proto.scrollIntoView = function record(this: HTMLElement) {
+      if (this.dataset.slotChoose) pulled.push(this.dataset.slotChoose);
+    };
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    try {
+      // 칸을 직접 누르면 끌어온다 — 좁은 화면에서 겨냥한 칸이 밖에 있을 수 있다.
+      root.querySelector<HTMLButtonElement>('[data-slot-choose="2"]')!.click();
+      await frame();
+      expect(pulled).toContain('2');
+
+      // 결과가 도착해 편성이 다시 그려질 때는 끌어오지 않는다.
+      pulled.length = 0;
+      root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+      await flush();
+      await frame();
+      expect(root.querySelectorAll('[data-character-result]').length).toBeGreaterThan(0);
+      expect(pulled).toEqual([]);
+    } finally {
+      delete proto.scrollIntoView;
+    }
+  });
+
+  it('empties just the deck being viewed', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelectorAll('[data-slot-choose] strong')[0]!.textContent).toBe('리타');
+    root.querySelector<HTMLButtonElement>('[data-deck-clear]')!.click();
+    expect([...root.querySelectorAll('[data-slot-choose] strong')].map((e) => e.textContent))
+      .toEqual(['빈 칸', '빈 칸', '빈 칸', '빈 칸', '빈 칸']);
+  });
+
+  it('brings the deck you were viewing to deck 1 when five-deck mode is turned off', () => {
+    // 2~5덱 중 하나만 계산하려고 끄는 경우가 많다 — 그때마다 손으로 옮기지 않게 한다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-deck-add]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="3"]')!.click();
+    chooseCharacter(root, 0, '프리바티');
+    const viewing = [...root.querySelectorAll('[data-slot-choose] strong')].map((e) => e.textContent);
+
+    mode.checked = false;
+    mode.dispatchEvent(new Event('change'));
+    expect([...root.querySelectorAll('[data-slot-choose] strong')].map((e) => e.textContent))
+      .toEqual(viewing);
+  });
+
+  it('swaps deck contents in place, keeping the numbers as fixed slots', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    const shown = () => [...root.querySelectorAll('[data-slot-choose] strong')].map((e) => e.textContent);
+    const deck1 = shown();
+
+    // 1덱에서는 «앞으로»가 막혀 있다.
+    expect(root.querySelector<HTMLButtonElement>('[data-deck-move="-1"]')!.disabled).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    const deck2 = shown();
+    root.querySelector<HTMLButtonElement>('[data-deck-move="-1"]')!.click();
+    // 내용만 맞바뀌고, 보던 편성을 따라간다.
+    expect(shown()).toEqual(deck2);
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    expect(shown()).toEqual(deck1);
+  });
+
+  it('gives each slot a target button instead of a dropdown, and one shared picker', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const choosers = [...root.querySelectorAll<HTMLButtonElement>('[data-slot-choose]')];
+
+    expect(choosers).toHaveLength(5);
+    expect(choosers.map((c) => c.querySelector('strong')!.textContent)).toEqual(names.slice(0, 5));
+    // 슬롯마다 있던 검색·드롭다운·교체 버튼은 판으로 옮겨 갔다.
+    expect(root.querySelectorAll('[data-character-filter]')).toHaveLength(0);
+    expect(root.querySelectorAll('[data-squad-slot]')).toHaveLength(0);
+    expect(root.querySelectorAll('[data-slot-pick]')).toHaveLength(0);
+    expect(root.querySelectorAll('[data-roster-search]')).toHaveLength(1);
+    expect(root.querySelector<HTMLAnchorElement>('footer a')?.href).toBe('https://github.com/Moris-kr/nikke-calc');
+  });
+
+  it('marks the slot the picker is aiming at, and moves on after a pick', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const aimed = () => [...root.querySelectorAll<HTMLButtonElement>('[data-slot-choose]')]
+      .findIndex((c) => c.getAttribute('aria-pressed') === 'true');
+
+    clearCharacterSlot(root, 2);
+    expect(aimed()).toBe(2);
+
+    // 프리바티만 초기 편성 밖이라 눌린다 — 나머지는 중복이라 막혀 있다.
+    searchRoster(root, '프리바티');
+    root.querySelector<HTMLButtonElement>('[data-roster-cell="프리바티"]')!.click();
+
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!);
+    expect(saved.decks[0].squad[2]).toBe('프리바티');
+    // 다 찼으므로 방금 넣은 칸에 머문다.
+    expect(aimed()).toBe(2);
+  });
+
+  it('덱 이름을 연필 단추로 붙이고, 같은 탭을 다시 눌러도 탭이 살아 있다', () => {
+    // 탭을 누를 때마다 탭 줄을 다시 그리면 방금 누른 단추가 사라져, 두 번 누르기가
+    // 성립하지 않는다 — 이름 고치기가 «작동 안 한다»고 보이던 이유다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+
+    const tab = () => root.querySelector<HTMLButtonElement>('[data-deck-tab="1"]')!;
+    const before = tab();
+    before.click();
+    expect(tab()).toBe(before);   // 보고 있던 덱을 다시 눌러도 그 단추 그대로다
+
+    // 연필은 보고 있는 덱에만 붙는다.
+    const pencils = root.querySelectorAll('[data-deck-rename]');
+    expect(pencils).toHaveLength(1);
+    expect((pencils[0] as HTMLElement).dataset.deckRename).toBe('1');
+
+    (pencils[0] as HTMLButtonElement).click();
+    const input = root.querySelector<HTMLInputElement>('[data-deck-name]')!;
+    input.value = '0장';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    // 탭에는 붙인 이름만 적는다 — 번호와 인원수가 양옆에 붙으면 이름이 묻힌다.
+    expect(tab().textContent).toBe('0장');
+    // 이름은 저장돼 새로고침에도 남는다.
+    expect(JSON.parse(localStorage.getItem('nikke-state-v1')!).decks[0].name).toBe('0장');
+  });
+
+  it('니케 고르기 판은 접힌 채로 시작하고, 칸을 눌러야 펴진다', () => {
+    // 고를 상황이 아니면 볼 일이 없는 판이다. 늘 펴 두면 화면을 차지하고, 마우스를
+    // 가운데 두고 굴리다 목록만 스크롤되는 일이 생긴다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const picker = () => root.querySelector<HTMLElement>('[data-picker]')!;
+    expect(picker().hidden).toBe(true);
+
+    focusSlot(root, 1);
+    expect(picker().hidden).toBe(false);
+
+    // 같은 칸을 다시 누르면 접는다.
+    focusSlot(root, 1);
+    expect(picker().hidden).toBe(true);
+
+    // 빈 곳을 누르면 접힌다.
+    focusSlot(root, 1);
+    expect(picker().hidden).toBe(false);
+    root.querySelector<HTMLElement>('.hero')!.click();
+    expect(picker().hidden).toBe(true);
+
+    // 칸을 비우면 다시 채우려는 참이라 펴 준다.
+    clearCharacterSlot(root, 2);
+    expect(picker().hidden).toBe(false);
+    // 닫기 단추로도 접힌다.
+    root.querySelector<HTMLButtonElement>('[data-picker-close]')!.click();
+    expect(picker().hidden).toBe(true);
+  });
+
+  it('blocks a nikke already in this deck, except in the slot being replaced', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    focusSlot(root, 1);
+
+    expect(root.querySelector<HTMLButtonElement>('[data-roster-cell="리타"]')!.disabled).toBe(true);
+
+    // 리타가 앉아 있는 칸을 겨냥하면 그 칸에 한해 다시 고를 수 있다.
+    focusSlot(root, 0);
+    expect(root.querySelector<HTMLButtonElement>('[data-roster-cell="리타"]')!.disabled).toBe(false);
+  });
+
+  // 곁가지(속성·무기·클래스·기업)로 걸린 것끼리는 짧은 이름이 앞이다.
+  it.each([
+    ['B2', ['나가', '크라운']],
+    ['수냉', ['앨리스', '프리바티']],
+    ['mg', ['리타', '크라운', '라피 : 레드 후드']],
+    ['화력형', ['앨리스', '프리바티', '라피 : 레드 후드']],
+    ['엘리시온', ['프리바티', '라피 : 레드 후드']],
+    ['sR', ['앨리스']],
+  ])('narrows the picker by character metadata query %s case-insensitively', (query, expected) => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    searchRoster(root, query);
+    expect(rosterNames(root)).toEqual(expected);
+  });
+
+  it('puts the typed name first, and reads 초성 and names without separators', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    searchRoster(root, 'ㄹㅍ');
+    // 「라피 : 레드 후드」와 「리타」가 함께 걸려도 이름 첫머리가 앞선다.
+    expect(rosterNames(root)[0]).toBe('라피 : 레드 후드');
+
+    searchRoster(root, '라피레드');
+    expect(rosterNames(root)).toEqual(['라피 : 레드 후드']);
+  });
+
+  it('keeps the aimed slot when the deck changes, and aims at that deck first empty', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    // 겨냥한 칸 표시는 **고르기 판을 폈을 때만** 보인다 — 고를 상황이 아니면 겨냥한
+    // 칸도 없는 게 맞다. 판을 펴 보면 그 덱의 첫 빈 칸을 겨냥하고 있다.
+    focusSlot(root, 0);
+    const aimed = [...root.querySelectorAll<HTMLButtonElement>('[data-slot-choose]')]
+      .findIndex((c) => c.getAttribute('aria-pressed') === 'true');
+    expect(aimed).toBe(0);   // 빈 덱이니 첫 칸
+  });
+
+  it('swaps a nikke with the neighbouring slot', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const slots = () => [...root.querySelectorAll<HTMLButtonElement>('[data-slot-choose]')]
+      .map((c) => c.querySelector('strong')!.textContent);
+    const before = slots();
+
+    root.querySelector<HTMLButtonElement>('[data-slot-move="0:1"]')!.click();
+
+    const after = slots();
+    expect(after[0]).toBe(before[1]);
+    expect(after[1]).toBe(before[0]);
+    expect(after.slice(2)).toEqual(before.slice(2));
+
+    root.querySelector<HTMLButtonElement>('[data-slot-move="1:-1"]')!.click();
+    expect(slots()).toEqual(before);
+  });
+
+  it('disables the move that would run past either end', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    expect(root.querySelector<HTMLButtonElement>('[data-slot-move="0:-1"]')!.disabled).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[data-slot-move="0:1"]')!.disabled).toBe(false);
+    expect(root.querySelector<HTMLButtonElement>('[data-slot-move="4:1"]')!.disabled).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[data-slot-move="4:-1"]')!.disabled).toBe(false);
+  });
+
+  it('keeps per-character settings with the nikke, not with the slot', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const moved = root.querySelector<HTMLButtonElement>('[data-slot-choose="0"]')!
+      .querySelector('strong')!.textContent!;
+    // 0번 캐릭터에 개별 설정을 준다.
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+
+    root.querySelector<HTMLButtonElement>('[data-slot-move="0:1"]')!.click();
+
+    // 설정은 이름에 매여 있으므로 자리를 옮겨도 그 캐릭터를 따라간다.
+    const saved = JSON.parse(localStorage.getItem('nikke-state-v1')!);
+    expect(saved.decks[0].squad[1]).toBe(moved);
+    expect(saved.decks[0].characters[moved]).toBeDefined();
+  });
+
+  it('copies the active deck squad and settings into the chosen decks', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+
+    for (let i = 0; i < 4; i += 1) root.querySelector<HTMLButtonElement>('[data-deck-add]')!.click();
+
+    // 덱 2는 미리 채워 둔다 — 덮어쓰기 대상은 기본 선택되지 않아야 한다.
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(root, 0, '앨리스');
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="1"]')!.click();
+
+    root.querySelector<HTMLButtonElement>('[data-deck-copy-open]')!.click();
+    const targets = [...root.querySelectorAll<HTMLInputElement>('[data-deck-copy-target]')];
+    expect(targets.map((box) => box.dataset.deckCopyTarget)).toEqual(['2', '3', '4', '5', '6']);
+    expect(targets[0]!.checked).toBe(false);
+    expect(targets.slice(1).every((box) => box.checked)).toBe(true);
+
+    // 이미 짜둔 덱 2까지 명시적으로 골라 덮어쓴다.
+    targets[0]!.checked = true;
+    const deckOne = [...root.querySelectorAll<HTMLSelectElement>('[data-squad-slot]')].map((slot) => slot.value);
+    root.querySelector<HTMLButtonElement>('[data-deck-copy-apply]')!.click();
+
+    for (const id of ['2', '3', '4', '5', '6']) {
+      root.querySelector<HTMLButtonElement>(`[data-deck-tab="${id}"]`)!.click();
+      expect([...root.querySelectorAll<HTMLSelectElement>('[data-squad-slot]')].map((slot) => slot.value))
+        .toEqual(deckOne);
+    }
+    expect(root.querySelector<HTMLElement>('[data-deck-copy-panel]')!.hidden).toBe(true);
+  });
+
+  it('refuses to copy a deck when no target is selected', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLButtonElement>('[data-deck-copy-open]')!.click();
+    for (const box of root.querySelectorAll<HTMLInputElement>('[data-deck-copy-target]')) box.checked = false;
+    root.querySelector<HTMLButtonElement>('[data-deck-copy-apply]')!.click();
+
+    expect(root.querySelector<HTMLElement>('[data-errors]')!.textContent)
+      .toContain('복사할 대상 덱을 하나 이상 선택하세요');
+    expect(root.querySelector<HTMLElement>('[data-deck-copy-panel]')!.hidden).toBe(false);
+  });
+
+  it('selects historical enikk seasons and refreshes the season list without loading rankings', async () => {
+    const requests: Array<{query:string;variables?:{raid:number}}> = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url:unknown, init?:RequestInit) => {
+      const body=JSON.parse(String(init?.body??'{}'));requests.push(body);
+      if(body.query?.includes('soloRaidSummaries'))return Response.json({data:{soloRaidSummaries:[{raid_number:40,wave_name:'Old',weakness:'Fire'},{raid_number:42,wave_name:'New',weakness:'Water'}]}});
+      if(body.query?.includes('SRRankings'))return Response.json({data:{SRRankings:[]}});
+      return Response.json({data:{characters:[]}});
+    }));
+    mountCalculator(root,{catalog,settings,version:'v1',client:new FakeClient(),storage:localStorage});
+    root.querySelector<HTMLButtonElement>('[data-view-tab="enikk"]')!.click();
+    const select=root.querySelector<HTMLSelectElement>('[data-enikk-season]')!;
+    await vi.waitFor(()=>expect(select.options.length).toBe(2));expect(select.value).toBe('42');
+    select.value='40';select.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-enikk-load]')!.click();
+    await vi.waitFor(()=>expect(root.querySelector('[data-enikk-status]')!.textContent).toContain('시즌 40 · 플레이어 0명'));
+    expect(requests.find(r=>r.query?.includes('SRRankings'))?.variables?.raid).toBe(40);
+    const count=requests.filter(r=>r.query?.includes('SRRankings')).length;
+    const refresh=root.querySelector<HTMLButtonElement>('[data-enikk-refresh]')!;expect(refresh.textContent).toBe('시즌 새로고침');refresh.click();
+    await vi.waitFor(()=>expect(refresh.disabled).toBe(false));expect(select.value).toBe('40');expect(requests.filter(r=>r.query?.includes('SRRankings'))).toHaveLength(count);
+    select.value='42';select.dispatchEvent(new Event('change'));expect(root.querySelector<HTMLElement>('[data-enikk-summary]')!.hidden).toBe(true);
+  });
+
+  it('breaks the enikk player list into pages of ten', () => {
+    const players = Array.from({ length: 25 }, (_, i) => ({
+      rank: i + 1, playerid: `p${i}`, server: 'KR', damage: 1000 - i, cp: 0,
+      decks: [{ squad: names.slice(0, 5), damage: 100, cp: 0, usable: true }],
+    }));
+    localStorage.setItem('nikke-enikk-v2', JSON.stringify({
+      season: { raid: 40, boss: 'Test', weakness: 'Fire' },
+      players, decks: 25, unknownNames: [], unsupported: 0,
+    }));
+
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-view-tab="enikk"]')!.click();
+
+    // 25명이면 3쪽, 첫 쪽은 열 명.
+    expect(root.querySelectorAll('.enikk-player')).toHaveLength(10);
+    expect(root.querySelector('.enikk-page-info')!.textContent).toBe('3쪽 중 1쪽');
+
+    // 마지막 쪽은 다섯 명만 남는다.
+    const last = [...root.querySelectorAll<HTMLButtonElement>('.enikk-page')]
+      .find((b) => b.textContent === '3')!;
+    last.click();
+    expect(root.querySelectorAll('.enikk-player')).toHaveLength(5);
+    expect(root.querySelector('.enikk-page-info')!.textContent).toBe('3쪽 중 3쪽');
+  });
+
+  it('ignores an enikk cache left by an older shape instead of crashing', () => {
+    // v1은 `players`가 숫자였다. 그 값을 새 코드가 배열로 읽으면 터진다.
+    localStorage.setItem('nikke-enikk-v1', JSON.stringify({ players: 300, comps: [] }));
+    localStorage.setItem('nikke-enikk-v2', JSON.stringify({ players: 300, comps: [] }));
+
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-view-tab="enikk"]')!.click();
+
+    // 낡은 캐시를 무시하고 «가져오기» 버튼이 그대로 남는다.
+    expect(root.querySelector<HTMLButtonElement>('[data-enikk-load]')!.hidden).toBe(false);
+    expect(root.querySelectorAll('.enikk-player')).toHaveLength(0);
+  });
+
+  it('drops the AI/no-server badges and states the supported count plainly', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const trust = root.querySelector<HTMLElement>('.trust-row')!;
+
+    expect(trust.textContent).not.toContain('AI 없음');
+    expect(trust.textContent).not.toContain('서버 전송 없음');
+    expect(trust.textContent).toContain(`${catalog.length}명 지원`);
+    // 판이 늘 펼쳐져 있으니 열 버튼이 없다.
+    expect(root.querySelector('[data-roster-open]')).toBeNull();
+  });
+
+  it('credits the upstream algorithm next to the supported count', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const credit = root.querySelector<HTMLAnchorElement>('.trust-row .credit-link')!;
+
+    expect(credit.textContent).toBe('원본 알고리즘 개발자에게 무한한 감사를');
+    expect(credit.href).toBe('https://github.com/Jgaram/nikke-calc');
+    // 새 탭으로 열되 opener를 넘기지 않는다.
+    expect(credit.target).toBe('_blank');
+    expect(credit.rel).toContain('noopener');
+  });
+
+  it('keeps the picker grid open under the squad, with no modal to dismiss', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+
+    expect(root.querySelector('[data-roster-modal]')).toBeNull();
+    expect(root.querySelectorAll('[data-roster-cell]')).toHaveLength(catalog.length);
+    expect(root.querySelector('[data-roster-count]')!.textContent).toBe(`${catalog.length}명`);
+
+    searchRoster(root, '라피');
+    expect(rosterNames(root)).toEqual(['라피 : 레드 후드']);
+    expect(root.querySelector('[data-roster-count]')!.textContent).toBe(`1 / ${catalog.length}명`);
+
+    searchRoster(root, '없는이름');
+    expect(root.querySelectorAll('[data-roster-cell]')).toHaveLength(0);
+    expect(root.querySelector<HTMLElement>('[data-roster-empty]')!.hidden).toBe(false);
+
+    searchRoster(root, '');
+    expect(root.querySelectorAll('[data-roster-cell]')).toHaveLength(catalog.length);
+  });
+
+  it('wipes every stored key and reloads only after the reset is confirmed', () => {
+    let reloads = 0;
+    localStorage.setItem('nikke-roster-v1', '{"리타":{}}');
+    localStorage.setItem('nikke-custom-v1', JSON.stringify({
+      테스트니케: {
+        name: '테스트니케',
+        nikke: {
+          rarity: 'SSR', element_code: '철갑', class: '화력형', weapon_type: 'AR',
+          burst_stage: '3', burst_cooldown: 40, max_ammo: 60, reload_time: 1,
+          fire_rate: 10, damage_coeff: 13.65, core_dmg_mult: 200,
+        },
+        skills: [],
+      },
+    }));
+    mountCalculator(root, {
+      catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      reload: () => { reloads += 1; },
+    });
+    // 편성 상태를 남겨 초기화 대상이 실제로 존재하게 한다.
+    chooseCharacter(root, 0, '프리바티');
+    expect(localStorage.getItem('nikke-state-v1')).not.toBeNull();
+
+    const modal = root.querySelector<HTMLElement>('[data-reset-modal]')!;
+    root.querySelector<HTMLButtonElement>('[data-reset-all]')!.click();
+    expect(modal.hidden).toBe(false);
+
+    // 취소하면 아무것도 지우지 않는다.
+    root.querySelector<HTMLButtonElement>('[data-reset-cancel]')!.click();
+    expect(modal.hidden).toBe(true);
+    expect(reloads).toBe(0);
+    expect(localStorage.getItem('nikke-state-v1')).not.toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[data-reset-all]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-reset-confirm]')!.click();
+
+    expect(localStorage.getItem('nikke-state-v1')).toBeNull();
+    expect(localStorage.getItem('nikke-roster-v1')).toBeNull();
+    expect(localStorage.getItem('nikke-custom-v1')).toBeNull();
+    expect(reloads).toBe(1);
+    expect(modal.hidden).toBe(true);
+  });
+
+  it('keeps five-deck tabs visually hidden until the mode is enabled', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const tabs = root.querySelector<HTMLElement>('[data-deck-tabs]')!;
+    expect(tabs.hidden).toBe(true);
+    expect(getComputedStyle(tabs).display).toBe('none');
+    const css = readFileSync(join(import.meta.dirname, 'styles.css'), 'utf8');
+    expect(css).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important;/);
+  });
+
+  it('sends the burst gauge charge time and restores it on reload', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.burstRegenTime).toBe(2);
+
+    const regen = root.querySelector<HTMLInputElement>('#burst-regen')!;
+    regen.value = '2.8';
+    regen.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.burstRegenTime).toBe(2.8);
+
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(root.querySelector<HTMLInputElement>('#burst-regen')!.value).toBe('2.8');
+  });
+
+  it('lays the console out in the in-game order', () => {
+    // 인게임·블라블라링크가 «공통 → 기업 → 클래스» 순으로 보여준다. 화면을 그대로
+    // 훑으며 옮겨 적을 수 있어야 하므로 순서 자체가 뜻을 갖는다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const order = [...root.querySelectorAll<HTMLInputElement>('[data-console-bucket]')]
+      .map((input) => input.dataset.consoleBucket);
+
+    expect(order).toEqual([
+      'company:엘리시온', 'company:테트라', 'company:미실리스', 'company:필그림', 'company:어브노말',
+      'class:화력형', 'class:방어형', 'class:지원형',
+    ]);
+    // 공통은 맨 앞이다.
+    const groups = [...root.querySelectorAll('.console-group h4')].map((h) => h.textContent);
+    expect(groups).toEqual(['공통', '기업', '클래스']);
+  });
+
+  it('sends per-affiliation console levels and restores them on reload', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+
+    // 클래스 3개 · 기업 5개가 각각 칸을 갖는다 — 엔진이 빠진 소속을 에러로 끊는다.
+    const bucketInput = (axis: 'class' | 'company', bucket: string) =>
+      root.querySelector<HTMLInputElement>(`[data-console-bucket="${axis}:${bucket}"]`)!;
+    expect(root.querySelectorAll('[data-console-bucket^="class:"]')).toHaveLength(3);
+    expect(root.querySelectorAll('[data-console-bucket^="company:"]')).toHaveLength(5);
+
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.console?.common_level).toBe(180);
+    expect(client.lastRequest?.console?.company_level).toEqual({
+      엘리시온: 100, 미실리스: 100, 테트라: 100, 필그림: 100, 어브노말: 100,
+    });
+
+    // 한 소속만 올려도 그 소속만 바뀐다.
+    const tetra = bucketInput('company', '테트라');
+    tetra.value = '250';
+    tetra.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(client.lastRequest?.console?.company_level).toEqual({
+      엘리시온: 100, 미실리스: 100, 테트라: 250, 필그림: 100, 어브노말: 100,
+    });
+
+    root.remove();
+    root = document.createElement('main');
+    document.body.append(root);
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    expect(bucketInput('company', '테트라').value).toBe('250');
+    expect(bucketInput('company', '엘리시온').value).toBe('100');
+  });
+
+  it('shows validation errors without running the calculator', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    const duration = root.querySelector<HTMLInputElement>('#duration')!;
+    duration.value = '181';
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-errors]')?.textContent).toContain('전투 시간은 10~180초여야 합니다.');
+    expect(client.simulateCalls).toBe(0);
+  });
+
+  it('renders totals and contribution rows after a successful calculation', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-result-total]')?.textContent).toContain('123,456');
+    expect(root.querySelectorAll('[data-character-result]')).toHaveLength(5);
+    expect(root.querySelector('[data-status]')?.textContent).toContain('계산 완료');
+    expect(client.lastRequest?.duration).toBe(10);
+  });
+
+  it('renders the normal-attack vs skill damage split per character', async () => {
+    class BreakdownClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return {
+          ...calculated,
+          charBreakdown: {
+            리타: {
+              normal: 45_000,
+              normalHits: 300,
+              skill: 15_000,
+              skillHits: 12,
+              skills: [{ name: '버스트', damage: 15_000, hits: 12 }],
+            },
+          },
+        };
+      }
+    }
+    const client = new BreakdownClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    const splits = [...root.querySelectorAll<HTMLElement>('[data-dmg-split]')];
+    // 분해 정보를 준 캐릭터에만 붙는다.
+    expect(splits).toHaveLength(1);
+    // 접힌 줄에는 비율, 펼치면 실제 대미지가 보인다 — 카드가 좁아 둘을 나눠 담는다.
+    expect(splits[0]!.querySelector<HTMLElement>('summary')!.textContent).toContain('평타 75%');
+    expect(splits[0]!.querySelector<HTMLElement>('summary')!.textContent).toContain('스킬 25%');
+    const legend = splits[0]!.querySelector<HTMLElement>('.split-legend')!.textContent!;
+    expect(legend).toContain('45,000');
+    expect(legend).toContain('15,000');
+    expect(splits[0]!.querySelector<HTMLElement>('.split-normal')!.style.width).toBe('75%');
+    expect(splits[0]!.querySelector<HTMLElement>('.split-skill')!.style.width).toBe('25%');
+    expect(splits[0]!.querySelector('.skill-breakdown li')!.textContent).toContain('버스트');
+  });
+
+  it('적는다 — 쏜 탄 가운데 코어에 맞은 몫', async () => {
+    // 「코어를 켰는데 이 사람만 딜이 안 오른다」는 물음의 답이 이 한 줄이다.
+    class CoreClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return {
+          ...calculated,
+          charBreakdown: {
+            리타: {
+              normal: 45_000, normalHits: 300, skill: 15_000, skillHits: 12,
+              shots: 300, coreShots: 45.6,
+              skills: [{ name: '버스트', damage: 15_000, hits: 12 }],
+            },
+          },
+        };
+      }
+    }
+    const client = new CoreClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    const summary = root.querySelector<HTMLElement>('[data-dmg-split] summary')!;
+    expect(summary.textContent).toContain('코어 15%');
+    expect(summary.querySelector<HTMLElement>('.legend-core')!.title).toContain('탄착군');
+  });
+
+  it('안 쏜 사람에게는 코어 줄을 붙이지 않는다', async () => {
+    // 옛 결과에는 사격 수가 없다 — 없는 값을 0%로 적으면 «코어를 하나도 못 맞혔다»는
+    // 거짓말이 된다.
+    class OldClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return {
+          ...calculated,
+          charBreakdown: {
+            리타: {
+              normal: 45_000, normalHits: 300, skill: 15_000, skillHits: 12,
+              skills: [{ name: '버스트', damage: 15_000, hits: 12 }],
+            },
+          },
+        };
+      }
+    }
+    const client = new OldClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    const summary = root.querySelector<HTMLElement>('[data-dmg-split] summary')!;
+    expect(summary.textContent).not.toContain('코어');
+  });
+
+  it('omits the damage split when the result has no breakdown (older cached results)', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelectorAll('[data-character-result]').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('[data-dmg-split]')).toHaveLength(0);
+  });
+
+  it('offers a report button once results exist and surfaces render failures', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    // 계산 전에는 결과가 없으니 보고서 버튼도 없다.
+    expect(root.querySelector('[data-report-open]')).toBeNull();
+
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    const open = root.querySelector<HTMLButtonElement>('[data-report-open]')!;
+    expect(open).not.toBeNull();
+    expect(root.querySelector('[data-shotgun-heatmap]')?.textContent).toBe('샷건 히트맵 보기');
+
+    open.click();
+    await flush();
+
+    // 초상화를 받는 동안 모달이 먼저 열리고 진행 상태를 보여준다.
+    // (그리기 실패 경로는 report.test.ts에서 직접 검증한다.)
+    expect(root.querySelector<HTMLElement>('[data-report-modal]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-report-preview]')!.textContent)
+      .toContain('보고서를 그리는 중');
+
+    root.querySelector<HTMLButtonElement>('[data-report-close]')!.click();
+    expect(root.querySelector<HTMLElement>('[data-report-modal]')!.hidden).toBe(true);
+    // 판을 통째로 그리고 초상화까지 받는 시험이라 느린 기계에서는 5초를 넘긴다.
+  }, 20_000);
+
+  it('reuses a cached result instead of recalculating', async () => {
+    // 캐시 재사용만 검증한다. 700ms 뒤 버프 대상 미리 계산이 실행 횟수에 끼어들지 않게 한다.
+    const cacheSettings = { ...settings, buffTargetWatch: {} };
+    // 다른 시험에서 예약된 비동기 저장과 공유하지 않되, 두 화면은 같은 저장소를 쓴다.
+    const entries = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => entries.get(key) ?? null,
+      setItem: (key, value) => { entries.set(key, value); },
+      removeItem: (key) => { entries.delete(key); },
+    };
+    const firstClient = new FakeClient();
+    mountCalculator(root, { catalog, settings: cacheSettings, version: 'v1', client: firstClient, storage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    expect(firstClient.simulateCalls).toBe(1);
+
+    root.replaceChildren();
+    const secondClient = new FakeClient();
+    mountCalculator(root, { catalog, settings: cacheSettings, version: 'v1', client: secondClient, storage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(secondClient.simulateCalls).toBe(0);
+    expect(root.querySelector('[data-status]')?.textContent).toContain('저장된 결과');
+    // 한 시험 안에서 판을 **두 번** 세우고 두 번 돌린다 — 느린 기계(CI)에서는 5초를
+    // 넘긴다. 바로 위 보고서 시험과 같은 몫이다.
+  }, 20_000);
+
+  it('renders a successful result when persistent storage rejects writes', async () => {
+    const client = new FakeClient();
+    const storage: StorageLike = {
+      getItem: () => null,
+      setItem: () => { throw new DOMException('full', 'QuotaExceededError'); },
+      removeItem: () => undefined,
+    };
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-result-total]')?.textContent).toContain('123,456');
+    expect(root.querySelector('[data-status]')?.textContent).toContain('계산 완료');
+  });
+
+  it('removes the preview badge when a preview slot is cleared', () => {
+    const previewCatalog = catalog.map((char, index) => ({ ...char, preview: index === 0 }));
+    mountCalculator(root, {
+      catalog: previewCatalog,
+      settings,
+      version: 'v1',
+      client: new FakeClient(),
+      storage: localStorage,
+    });
+    const firstCard = root.querySelector<HTMLElement>('[data-slot-card="0"]')!;
+    expect(firstCard.classList.contains('is-preview')).toBe(true);
+
+    clearCharacterSlot(root, 0);
+
+    expect(root.querySelector<HTMLElement>('[data-slot-card="0"]')!
+      .classList.contains('is-preview')).toBe(false);
+  });
+
+  it('uses a 52px editable core only while core is enabled and resets enemy fields only', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const duration = root.querySelector<HTMLInputElement>('#duration')!;
+    const seed = root.querySelector<HTMLInputElement>('#seed')!;
+    const coreToggle = root.querySelector<HTMLInputElement>('#has-core')!;
+    const corePx = root.querySelector<HTMLInputElement>('#core-px')!;
+    duration.value = '60';
+    seed.value = '99';
+    expect(corePx.disabled).toBe(true);
+    expect(corePx.value).toBe('52');
+
+    coreToggle.checked = true;
+    coreToggle.dispatchEvent(new Event('change'));
+    corePx.value = '77';
+    root.querySelector<HTMLInputElement>('#enemy-def')!.value = '1';
+    root.querySelector<HTMLSelectElement>('#enemy-code')!.value = '작열';
+    root.querySelector<HTMLInputElement>('#has-parts')!.checked = true;
+    root.querySelector<HTMLButtonElement>('[data-reset-enemy]')!.click();
+
+    expect(duration.value).toBe('60');
+    expect(seed.value).toBe('99');
+    expect(root.querySelector<HTMLInputElement>('#enemy-def')!.value).toBe('31784');
+    expect(coreToggle.checked).toBe(false);
+    expect(corePx.value).toBe('52');
+    expect(corePx.disabled).toBe(true);
+  });
+
+  it('forwards enabled per-character settings in the request', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const attack = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-overload-key="atk_pct"]')!;
+    attack.value = '40';
+    attack.dispatchEvent(new Event('input'));
+    const skillOne = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skillOne.value = '4';
+    skillOne.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(client.lastRequest?.characters?.리타?.overload?.atk_pct).toBe(40);
+    expect(client.lastRequest?.characters?.리타?.growthStage).toBe(3);
+    expect(client.lastRequest?.characters?.리타?.skillLevels).toEqual({ '1': 4, '2': 10, '3': 10 });
+  });
+
+  it.each([-1, 1.5, 11])('blocks a forged growth stage %s outside the character rarity range', async (growthStage) => {
+    const client = new FakeClient();
+    const invalidSettings: SettingsCatalog = {
+      ...settings,
+      characters: {
+        ...settings.characters,
+        리타: { ...settings.characters.리타!, growthStage },
+      },
+    };
+    mountCalculator(root, { catalog, settings: invalidSettings, version: 'v1', client, storage: localStorage });
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-errors]')?.textContent)
+      .toContain('덱 1 · 리타: 돌파 단계는 0~10 정수여야 합니다.');
+    expect(client.simulateCalls).toBe(0);
+  });
+
+  it('blocks released skill levels outside the integer 1-to-10 range', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const skillOne = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skillOne.value = '0';
+    skillOne.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-errors]')?.textContent)
+      .toContain('덱 1 · 리타: 스킬 레벨은 1~10 정수여야 합니다.');
+    expect(client.simulateCalls).toBe(0);
+  });
+
+  it('blocks forged non-ten levels for a locked preview character', async () => {
+    const client = new FakeClient();
+    const previewName = '아마기 유키코';
+    const previewCatalog: CharacterMeta[] = [...catalog, {
+      name: previewName,
+      burstStage: '3',
+      elementCode: '작열',
+      weaponType: 'MG',
+      className: '화력형',
+      manufacturer: '미상',
+      preview: true,
+      image: null,
+      nameCode: null, resourceId: null, aliases: [],
+    }];
+    const previewSettings: SettingsCatalog = {
+      ...settings,
+      characters: {
+        ...settings.characters,
+        [previewName]: {
+          ...settings.characters.리타!,
+          skillLevels: { '1': 9, '2': 10, '3': 10 },
+          skillLevelsLocked: true,
+        },
+      },
+    };
+    mountCalculator(root, {
+      catalog: previewCatalog,
+      settings: previewSettings,
+      version: 'v1',
+      client,
+      storage: localStorage,
+    });
+    chooseCharacter(root, 0, previewName);
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+
+    expect(root.querySelector('[data-errors]')?.textContent)
+      .toContain(`덱 1 · ${previewName}: 수치 미공개 캐릭터는 스킬 Lv10만 사용할 수 있습니다.`);
+    expect(client.simulateCalls).toBe(0);
+  });
+
+  it('runs non-empty decks sequentially and allows cross-deck duplicates', async () => {
+    // 결과에 버프 대상을 실어 준다. 안 실으면 계산이 끝난 뒤 «미리 계산»이 한 판 더
+    // 도는데(리타가 감시 대상이다), 그건 가짜 결과에만 있는 일이라 판 수를 흐린다.
+    class DeckClient extends FakeClient {
+      override async simulate(request: SimulationRequest): Promise<SimulationResult> {
+        await super.simulate(request);
+        return { ...calculated, buffTargets: { 리타: [] } };
+      }
+    }
+    const client = new DeckClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    root.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    let toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    let skillOne = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skillOne.value = '4';
+    skillOne.dispatchEvent(new Event('change'));
+    let growth = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-growth-stage]')!;
+    growth.value = '1';
+    growth.dispatchEvent(new Event('change'));
+    const mode = root.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(root, 0, '리타');
+    toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    skillOne = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skillOne.value = '7';
+    skillOne.dispatchEvent(new Event('change'));
+    growth = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-growth-stage]')!;
+    growth.value = '7';
+    growth.dispatchEvent(new Event('change'));
+
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+
+    expect(client.requests).toHaveLength(2);
+    expect(client.requests[0]?.squad).toContain('리타');
+    expect(client.requests[1]?.squad).toEqual(['리타']);
+    expect(client.requests[0]?.characters?.리타?.skillLevels?.['1']).toBe(4);
+    expect(client.requests[1]?.characters?.리타?.skillLevels?.['1']).toBe(7);
+    expect(client.requests[0]?.characters?.리타?.growthStage).toBe(1);
+    expect(client.requests[1]?.characters?.리타?.growthStage).toBe(7);
+    // 덱이 둘 이상이면 탭으로 갈라 한 번에 하나만 편다. 탭은 **덱 번호 순서 그대로**다.
+    const deckTabs = [...root.querySelectorAll<HTMLButtonElement>('[data-deck-result-tab]')];
+    expect(deckTabs.map((tab) => tab.dataset.deckResultTab)).toEqual(['1', '2']);
+    expect(root.querySelectorAll('[data-deck-result]')).toHaveLength(1);
+    expect(root.querySelector<HTMLElement>('[data-deck-result]')!.dataset.deckResult).toBe('1');
+    // 딜 순위는 자리를 옮기지 않고 표시로만 붙는다.
+    expect(deckTabs.map((tab) => tab.dataset.deckRank)).toEqual(['1', '2']);
+
+    deckTabs[1]!.click();
+    expect(root.querySelector<HTMLElement>('[data-deck-result]')!.dataset.deckResult).toBe('2');
+    expect(root.querySelector('[data-batch-total]')?.textContent).toContain('246,912');
+    expect(root.querySelector('[data-status]')?.textContent).toContain('2개 덱 계산 완료');
+  });
+
+  it('「이 육성을 덱 전원에게」가 덱의 나머지에게 육성을 입힌다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    // 1번 칸의 스킬을 올린다.
+    const toggle = root.querySelector<HTMLInputElement>('[data-slot-card="0"] [data-custom-toggle]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    const skill = root.querySelector<HTMLSelectElement>('[data-slot-card="0"] [data-skill-level="1"]')!;
+    skill.value = '4';
+    skill.dispatchEvent(new Event('change'));
+
+    const spread = root.querySelector<HTMLButtonElement>('[data-slot-card="0"] [data-spread-growth]')!;
+    // 넷을 한꺼번에 덮어쓰는 단추라 한 번으로는 안 터진다.
+    spread.click();
+    const saved = () => (JSON.parse(localStorage.getItem('nikke-state-v1')!) as
+      { decks: Array<{ squad: string[]; characters: Record<string, { skillLevels?: Record<string, number> }> }> })
+      .decks[0]!;
+    const second = saved().squad[1]!;
+    expect(saved().characters[second]?.skillLevels?.['1']).not.toBe(4);
+
+    root.querySelector<HTMLButtonElement>('[data-slot-card="0"] [data-spread-growth]')!.click();
+    expect(saved().characters[saved().squad[1]!]?.skillLevels?.['1']).toBe(4);
+    expect(saved().characters[saved().squad[4]!]?.skillLevels?.['1']).toBe(4);
+  });
+
+  it('사용 설명서를 열면 화면의 기능 설명이 나온다', () => {
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    const modal = root.querySelector<HTMLElement>('[data-guide-modal]')!;
+    expect(modal.hidden).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[data-guide-open]')!.click();
+    expect(modal.hidden).toBe(false);
+    // 「이게 뭔지 모르겠다」던 그 항목이 실제로 적혀 있어야 설명서다.
+    expect(modal.textContent).toContain('설정 이어받기');
+    expect(modal.textContent).toContain('다른 덱에서 이미 만져 둔 개별 설정');
+    expect(modal.querySelectorAll('.guide-entry').length).toBeGreaterThan(10);
+
+    // 두 번 열어도 글이 두 벌 생기지 않는다.
+    const first = modal.querySelectorAll('.guide-entry').length;
+    root.querySelector<HTMLButtonElement>('[data-guide-close]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-guide-open]')!.click();
+    expect(modal.querySelectorAll('.guide-entry').length).toBe(first);
+  });
+
+  /** 5덱 모드로 켜고 2덱에 한 명 넣는다 — 결과 탭이 나오려면 덱이 둘이어야 한다. */
+  const twoDecks = (host: HTMLElement) => {
+    host.querySelector<HTMLInputElement>('#duration')!.value = '10';
+    const mode = host.querySelector<HTMLInputElement>('#squad-mode')!;
+    mode.checked = true;
+    mode.dispatchEvent(new Event('change'));
+    host.querySelector<HTMLButtonElement>('[data-deck-tab="2"]')!.click();
+    chooseCharacter(host, 0, '리타');
+  };
+
+  it('결과에서 보던 덱은 다시 그려도 그대로다', async () => {
+    // 「자세히 보기」를 켜면 판을 다시 그린다 — 그때 1덱으로 튕기면 3덱을 보던 사람은
+    // 켤 때마다 다시 눌러야 한다.
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    twoDecks(root);
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+
+    const second = root.querySelector<HTMLButtonElement>('[data-deck-result-tab="2"]')!;
+    second.click();
+    expect(root.querySelector<HTMLElement>('[data-deck-result]')!.dataset.deckResult).toBe('2');
+
+    root.querySelector<HTMLInputElement>('[data-detail-damage]')!.click();
+    expect(root.querySelector<HTMLElement>('[data-deck-result]')!.dataset.deckResult).toBe('2');
+    // 두 판을 짜고 한 판 돌리는 시험이라 느린 기계(CI)에서는 기본 5초를 넘긴다.
+  }, 20_000);
+
+  it('덱끼리 견주기는 막대를 다섯 덱 통틀어 1등 기준으로 그린다', async () => {
+    const client = new FakeClient();
+    mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+    twoDecks(root);
+    root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    await flush();
+    await flush();
+
+    const widths = () => [...root.querySelectorAll<HTMLElement>('.share-track i')]
+      .map((bar) => bar.style.width);
+    // 기본은 그 덱의 1등이 100%다.
+    expect(widths()).toContain('100%');
+
+    const compare = root.querySelector<HTMLInputElement>('[data-compare-decks]')!;
+    compare.click();
+    // 덱이 하나뿐이면 견줄 것이 없으므로 이 칸 자체가 없다(아래 단일 덱 시험 참고).
+    expect(compare.checked).toBe(true);
+    expect(widths().length).toBeGreaterThan(0);
+  }, 20_000);
+
+  it('이름으로 편성 — 친 글자 통째로 니케를 빼고 더해 등록한다', () => {
+    // 글자마다 고르는 것으로는 «한 명 더»도 «이 사람은 빼»도 할 수 없다.
+    mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
+    root.querySelector<HTMLButtonElement>('[data-abbrev-open]')!.click();
+    const input = root.querySelector<HTMLInputElement>('[data-abbrev-input]')!;
+    input.value = '리크';
+    root.querySelector<HTMLButtonElement>('[data-abbrev-apply]')!.click();
+
+    const chips = () => [...root.querySelectorAll<HTMLElement>('[data-abbrev-chip]')]
+      .map((chip) => chip.dataset.abbrevChip!);
+    expect(chips()).toEqual(['리타', '크라운']);
+
+    // 한 명 빼고
+    root.querySelector<HTMLButtonElement>('[data-abbrev-chip="크라운"] .abbrev-chip-x')!.click();
+    expect(chips()).toEqual(['리타']);
+    // 한 명 더한다
+    const add = root.querySelector<HTMLSelectElement>('[data-abbrev-add]')!;
+    add.value = '앨리스';
+    add.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(chips()).toEqual(['리타', '앨리스']);
+
+    root.querySelector<HTMLButtonElement>('[data-abbrev-save-whole]')!.click();
+    // 등록하면 그 자리에서 다시 풀어 편성까지 바뀐다.
+    expect(savedSquad().slice(0, 2)).toEqual(['리타', '앨리스']);
+    const mine = JSON.parse(localStorage.getItem('nikke-abbrev-mine-v1')!) as
+      { rules: Array<{ key: string; names: string[] }> };
+    expect(mine.rules).toContainEqual({ key: '리크', names: ['리타', '앨리스'] });
+  });
+
+  // ── 핵 ────────────────────────────────────────────────────────────────
+  describe('핵', () => {
+    const openHacks = (client: CalculatorClientLike) => {
+      mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+      root.querySelector<HTMLButtonElement>('[data-hack-open]')!.click();
+      return root;
+    };
+    const toggle = (id: string) => {
+      const box = root.querySelector<HTMLInputElement>(id)!;
+      box.click();
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    it('전투 조건 창의 다른 탭으로 열린다', () => {
+      openHacks(new FakeClient());
+      expect(root.querySelector<HTMLElement>('[data-battle-modal]')!.hidden).toBe(false);
+      expect(root.querySelector<HTMLElement>('[data-hack-body]')!.hidden).toBe(false);
+      // 전투 조건은 가려진다 — 같은 판에 섞이면 실수로 켜진다.
+      expect(root.querySelector<HTMLElement>('[data-battle-body]')!.hidden).toBe(true);
+      expect(root.querySelector('[data-battle-title]')?.textContent).toBe('핵 사용');
+
+      root.querySelector<HTMLButtonElement>('[data-battle-tab="battle"]')!.click();
+      expect(root.querySelector<HTMLElement>('[data-hack-body]')!.hidden).toBe(true);
+      expect(root.querySelector('[data-battle-title]')?.textContent).toBe('전투 조건');
+    });
+
+    it('안 켰으면 요청에 실리지 않는다', async () => {
+      const client = new FakeClient();
+      mountCalculator(root, { catalog, settings, version: 'v1', client, storage: localStorage });
+      root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+      await flush();
+      // 켠 적 없는 사람의 결과는 예전과 한 톨도 달라지지 않아야 한다.
+      expect(client.lastRequest?.hacks).toBeUndefined();
+      expect(root.querySelector<HTMLElement>('[data-hack-banner]')!.hidden).toBe(true);
+    });
+
+    it('켜면 요청에 실리고 화면이 크게 떠든다', async () => {
+      const client = new FakeClient();
+      openHacks(client);
+      toggle('#hack-always-crit');
+      toggle('#hack-damage');
+      const mult = root.querySelector<HTMLInputElement>('#hack-damage-mult')!;
+      mult.value = '3';
+      mult.dispatchEvent(new Event('change', { bubbles: true }));
+
+      root.querySelector<HTMLFormElement>('form')!.requestSubmit();
+      await flush();
+      expect(client.lastRequest?.hacks)
+        .toEqual({ burstCharge: false, infiniteAmmo: false, alwaysCrit: true, damageMult: 3 });
+
+      const banner = root.querySelector<HTMLElement>('[data-hack-banner]')!;
+      expect(banner.hidden).toBe(false);
+      expect(root.querySelector('[data-hack-banner-list]')?.textContent)
+        .toBe('올크리핵 · 대미지증가핵 ×3');
+      // 사람들은 결과만 잘라 올린다 — 그 그림에도 표가 찍혀야 한다.
+      expect(root.querySelector('[data-result-panel]')!.classList.contains('is-hacked')).toBe(true);
+    });
+
+    it('«전부 끄기»로 한 번에 끈다', () => {
+      openHacks(new FakeClient());
+      toggle('#hack-burst-charge');
+      toggle('#hack-infinite-ammo');
+      expect(root.querySelector<HTMLElement>('[data-hack-banner]')!.hidden).toBe(false);
+
+      root.querySelector<HTMLButtonElement>('[data-hack-off]')!.click();
+      expect(root.querySelector<HTMLElement>('[data-hack-banner]')!.hidden).toBe(true);
+      expect(root.querySelector<HTMLInputElement>('#hack-burst-charge')!.checked).toBe(false);
+      expect(root.querySelector<HTMLInputElement>('#hack-infinite-ammo')!.checked).toBe(false);
+    });
+
+    it('새로고침해도 켜 둔 채로 남는다', () => {
+      openHacks(new FakeClient());
+      toggle('#hack-always-crit');
+
+      root.remove();
+      root = document.createElement('main');
+      document.body.append(root);
+      mountCalculator(root, {
+        catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage,
+      });
+      expect(root.querySelector<HTMLInputElement>('#hack-always-crit')!.checked).toBe(true);
+      expect(root.querySelector<HTMLElement>('[data-hack-banner]')!.hidden).toBe(false);
+    });
+
+    it('남의 전투 조건 코드를 적용해도 내 핵은 그대로다', () => {
+      openHacks(new FakeClient());
+      toggle('#hack-always-crit');
+      // 코드에는 핵이 담기지 않는다 — 그렇다고 남의 코드가 내 것을 끄지도 않는다.
+      const code = encodeBattleCode(
+        { ...decodeBattleCode('NK3-e30'), duration: 90 } as never,
+      );
+      const input = root.querySelector<HTMLTextAreaElement>('[data-battle-share-in]')!;
+      input.value = code;
+      root.querySelector<HTMLButtonElement>('[data-battle-share-apply]')!.click();
+
+      expect(root.querySelector<HTMLInputElement>('#duration')!.value).toBe('90');
+      expect(root.querySelector<HTMLInputElement>('#hack-always-crit')!.checked).toBe(true);
+    });
+  });
+});
