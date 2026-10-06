@@ -759,7 +759,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
       <!-- 초읽기. 안내 띠를 닫아도 남는다 — 닫는 것은 «읽었다»는 뜻이지
            «시계도 필요 없다»는 뜻이 아니다. 말은 스크립트가 넣는다. -->
       <p class="site-countdown" data-countdown hidden>[<span data-countdown-label></span> <b data-countdown-clock>00:00:00</b>]</p>
-      <p class="site-notice"><a href="https://gall.dcinside.com/mgallery/board/view/?id=gov&amp;no=6038781" target="_blank" rel="noreferrer">설명서 확인, 문의, 피드백, 착한말 등은 여기로 →</a></p>
+      <p class="site-notice"><a href="https://gall.dcinside.com/mgallery/board/view/?id=gov&amp;no=6276609" target="_blank" rel="noreferrer">설명서 확인, 문의, 피드백, 착한말 등은 여기로 →</a></p>
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">BROWSER SIM <span>·</span> 60 FPS TIMELINE</p>
