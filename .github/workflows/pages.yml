@@ -49,6 +49,7 @@ jobs:
           VITE_BLABLA_PROXY: ${{ vars.VITE_BLABLA_PROXY }}
           VITE_SHARE_API: ${{ vars.VITE_SHARE_API }}
           VITE_BASE: ${{ vars.VITE_BASE }}
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
         run: npm run build
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

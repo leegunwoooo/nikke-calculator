@@ -537,7 +537,7 @@ export function openGrowthEfficiency(batch: BatchResult, deps: Deps): void {
       const portraits = await loadPortraits(pairs.flatMap(p=>p.before.request.squad), deps.catalog, import.meta.env.BASE_URL);
       if (closed) return;
       const sections = pairs.map(pair => {
-        const make = (entry: DeckResultEntry, suffix: string) => renderReport({total:entry.result.squadTotal,decks:[entry]}, {siteUrl:'moris-kr.github.io/nikke-calc',deckNames:{[entry.deckId]:`${deps.deckName(entry.deckId)} · ${suffix}`}},portraits);
+        const make = (entry: DeckResultEntry, suffix: string) => renderReport({total:entry.result.squadTotal,decks:[entry]}, {siteUrl:location.host + location.pathname.replace(/\/$/,''),deckNames:{[entry.deckId]:`${deps.deckName(entry.deckId)} · ${suffix}`}},portraits);
         const left=make(pair.before,'현재'),right=make(pair.after,'목표 육성');
         const height=Math.max(left.height/left.width,right.height/right.width)*568;
         return {pair,left,right,height};

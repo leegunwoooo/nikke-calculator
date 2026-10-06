@@ -16,7 +16,16 @@ for (const file of readdirSync(engineDir).filter((f) => f.endsWith('.ts') && !f.
 }
 const engineId = JSON.stringify(engineHash.digest('hex').slice(0, 12));
 
+// index.html 안의 절대 주소(canonical·og·JSON-LD) — 배포 도메인이 원본과 다르면
+// SITE_ORIGIN으로 덮는다. 뒤에 붙는 경로는 항상 슬래시로 시작하게 맞춰 둔다.
+const siteOrigin = (process.env.SITE_ORIGIN || 'https://moris-kr.github.io/nikke-calc/')
+  .replace(/\/?$/, '/');
+
 export default defineConfig({
+  plugins: [{
+    name: 'site-origin-html',
+    transformIndexHtml: (html: string) => html.replaceAll('%SITE_ORIGIN%', siteOrigin),
+  }],
   // 배포 경로 — 저장소 이름이 바뀌면 GitHub Pages 주소도 바뀌므로 VITE_BASE로 덮는다
   // (예: nikke-calculator 저장소 → /nikke-calculator/). 로컬 개발은 기본값 그대로.
   base: process.env.VITE_BASE || '/nikke-calc/',

@@ -3,8 +3,9 @@ import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const pages=JSON.parse(readFileSync(resolve(root,'content/guides.json'),'utf8'));
-const base='https://moris-kr.github.io/nikke-calc/';
-const path='/nikke-calc/';
+// 배포 주소 — 원본(Pages)이 기본값, 다른 도메인은 SITE_ORIGIN·VITE_BASE로 덮는다.
+const base=(process.env.SITE_ORIGIN||'https://moris-kr.github.io/nikke-calc/').replace(/\/?$/,'/');
+const path=(process.env.VITE_BASE||'/nikke-calc/').replace(/\/?$/,'/');
 const escape=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const links=pages.map(page=>`<li><a href="${path}guides/${page.slug}/">${escape(page.title)}</a><p>${escape(page.description)}</p></li>`).join('');
 const style=`:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#091321;color:#e2eaf5}*{box-sizing:border-box}body{margin:0;line-height:1.85;word-break:keep-all;overflow-wrap:anywhere}header,main,footer{max-width:900px;margin:auto;padding:24px}header{border-bottom:1px solid #30445e}a{color:#99c8ff;text-underline-offset:4px}a:focus-visible{outline:3px solid #ffc875;outline-offset:5px}h1{font-size:clamp(1.65rem,4vw,2.5rem);line-height:1.35}h2{margin-top:2.2em;font-size:1.3rem}p{color:#bed0e6}nav{display:flex;gap:20px;flex-wrap:wrap}.cta{display:inline-block;background:#84bfff;color:#07172a;padding:12px 22px;border-radius:10px;font-weight:700;text-decoration:none}.intro{font-size:1.1rem}.cards{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}.cards li{padding:20px;border:1px solid #30445e;border-radius:12px;background:#132237}.cards p{margin-bottom:0;font-size:.95rem}.cards a{font-weight:700}footer{font-size:.9rem;border-top:1px solid #30445e}.breadcrumb{font-size:.9rem}`;
@@ -30,4 +31,11 @@ writeFileSync(resolve(root,'public/sitemap.xml'),`<?xml version="1.0" encoding="
 ${urls.map(url=>`  <url><loc>${escape(url)}</loc></url>`).join('\n')}
 </urlset>
 `);
-console.log(`Built ${pages.length+1} public guide pages and sitemap.`);
+writeFileSync(resolve(root,'public/robots.txt'),`# 전부 열어 둔다. 막을 것이 없다 — 이 사이트는 계산을 방문자 브라우저에서 돌리고
+# 서버에 남기는 개인 정보가 없다.
+User-agent: *
+Allow: /
+
+Sitemap: ${base}sitemap.xml
+`);
+console.log(`Built ${pages.length+1} public guide pages, sitemap, robots.`);
