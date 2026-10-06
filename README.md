@@ -23,12 +23,14 @@ AI가 요청하면 **열어 둔 계산기 브라우저가 계산**하고, Render
 
 ## 구조
 
-- `calculator/`, `context/`, `data/`: 계산 엔진과 원본 데이터
-- `site/`: Vite와 TypeScript로 만든 정적 웹 애플리케이션
-- `site/public/calculator.worker.js`: 계산을 UI와 분리해 순차 실행하는 Web Worker
-- `site/pybridge/bridge.py`: 웹 요청을 기존 Python 엔진 호출로 변환하는 브리지
+- `site/`: Vite와 TypeScript로 만든 정적 웹 애플리케이션. `site/src/engine/`이 단일 TypeScript 계산 엔진
+- `scraper/`: 블라블라링크 CDN에서 원시 게임 데이터를 수집하는 Python 스크래퍼 (`nikke_scraped.json`이 유일한 원시 데이터 정본)
+- `data/`: 파싱된 정규화 데이터 — 캐릭터·스킬·무기 지연·버스트 게이지·기본 스펙
+- `context/`: 게임 메커니즘 문서와 골든 스냅샷 회귀, `doclint.py`(문서↔코드 불일치 강제)
+- `worker/`: 블라블라링크 조회 프록시 (Cloudflare Workers). nikke-api의 폴백으로만 씁니다
+- `worker-share/`: 공유 코드·투표·피드백·레이드 중계 (Cloudflare Workers + KV + Durable Object)
+- `nikke_mcp/`: AI 에이전트용 MCP 서버 — 로컬 stdio와 Render 공개 중계
 - `site/scripts/sync-runtime.mjs`: 엔진, 데이터, 캐릭터 목록과 이미지를 웹 런타임으로 동기화
-- `worker/`: 블라블라링크 조회 프록시 (Cloudflare Workers). 사이트와 따로 배포합니다
 - `.github/workflows/pages.yml`: 테스트, 빌드, GitHub Pages 배포 자동화
 
 ## 주요 기능
@@ -43,13 +45,13 @@ AI가 요청하면 **열어 둔 계산기 브라우저가 계산**하고, Render
 - 렛츠도로 CSV 불러오기와 블라블라링크 프로필 연동으로 실제 육성 상태 반영
 - 스쿼드를 링크·코드로 공유, 편성 프리셋 저장, 덱끼리 순위 비교
 
-웹에서는 고정 버전 Pyodide로 Python 엔진을 Web Worker 안에서 실행합니다. 일반 웹 계산은 브라우저 안에서 실행합니다. 선택 기능인 AI 연결을 켜면 육성·편성·계산 결과가 AI 서비스와 Render 중계 서버를 거칩니다. 결과 캐시는 해당 브라우저의 `localStorage`에 최대 30개까지 저장됩니다.
+모든 계산은 브라우저 안의 TypeScript 엔진(`site/src/engine/`)이 Web Worker에서 실행합니다. 선택 기능인 AI 연결을 켜면 육성·편성·계산 결과가 AI 서비스와 Render 중계 서버를 거칩니다. 결과 캐시는 해당 브라우저의 `localStorage`에 최대 30개까지 저장됩니다.
 
-현재 선택 목록은 `data/parsed_nikke.json`과 `data/parsed_skills.json` 양쪽에 존재하는 실제 캐릭터만 포함합니다. `test_` 데이터는 제외하며, 미리보기 캐릭터는 검증되지 않은 데이터라는 경고를 표시합니다. 현재 동기화 기준 지원 캐릭터는 199명입니다.
+현재 선택 목록은 `data/parsed_nikke.json`과 `data/parsed_skills.json` 양쪽에 존재하는 실제 캐릭터만 포함합니다. `test_` 데이터는 제외하며, 미리보기 캐릭터는 검증되지 않은 데이터라는 경고를 표시합니다. 현재 동기화 기준 지원 캐릭터는 202명입니다.
 
 ## 로컬 실행
 
-Node.js 22 이상과 Python 3가 필요합니다.
+Node.js 22 이상이 필요합니다(문서 검증 `doclint`에는 Python 3도 필요).
 
 ```bash
 cd site
@@ -57,26 +59,17 @@ npm install
 npm run dev
 ```
 
-Vite가 표시한 로컬 주소의 `/nikke-calc/` 경로로 접속하면 됩니다. 첫 계산 때 Pyodide를 내려받으므로 인터넷 연결이 필요하고 이후 브라우저 캐시를 활용합니다.
+Vite가 표시한 로컬 주소의 `/nikke-calc/` 경로로 접속하면 됩니다.
 
 ## 검증
 
-웹 애플리케이션의 빠른 검증:
-
 ```bash
 cd site
-npm test -- --run
-python3 scripts/test-bridge.py
-npm run check-pages
-npm run build
-```
-
-기존 계산 엔진을 포함한 전체 검증:
-
-```bash
-python3 calculator/damage.py
-python3 -m context.doclint
-python3 -m context.snapshot
+npm test -- --run src/engine   # 엔진 단위 테스트
+npx tsx scripts/snapshot.ts    # 골든 대미지 회귀
+npm run check-pages            # Pages 워크플로 점검
+npm run build                  # 타입체크 + 프로덕션 빌드
+python -m context.doclint      # 문서↔코드·데이터 정합 (repo 루트에서)
 ```
 
 ## 데이터 갱신
@@ -93,7 +86,15 @@ npm run check-runtime
 
 ## 배포
 
-`main` 브랜치에 푸시하면 GitHub Actions가 의존성을 잠금 파일대로 설치하고 테스트와 프로덕션 빌드를 통과한 `site/dist`만 GitHub Pages에 배포합니다. Vite의 배포 기본 경로는 `/nikke-calc/`입니다.
+현재 프로덕션은 **Vercel**(<https://nikke-calculator-xi.vercel.app/>)입니다. 루트 `vercel.json`이
+repo 전체를 받아 `site/`를 빌드하고 `site/dist`를 서빙합니다 — 빌드에 `../data`가 필요해서
+`site/`만 루트로 두는 배포는 실패합니다. Git 연결 배포는 커밋 작성자 이메일이 GitHub 계정과
+일치해야만 허용되므로, 안 맞으면 로컬 `vercel build --prod` → `vercel deploy --prebuilt --prod`
+(저장소 밖 디렉터리에서)로 올립니다.
+
+`main` 브랜치의 `.github/workflows/pages.yml`은 GitHub Pages 배포용으로도 준비돼 있습니다 —
+repo를 public으로 열고 Pages를 켜면 테스트·빌드·배포가 자동으로 돕니다. 경로·도메인은 저장소
+변수 `VITE_BASE`(Pages는 `/nikke-calculator/`, Vercel은 `/`)와 `SITE_ORIGIN`으로 맞춥니다.
 
 ### 블라블라링크 연동 (선택)
 
@@ -110,9 +111,15 @@ CORS를 열어 두지 않고 조회에 로그인 세션을 요구하므로, 정�
    워커 `/sync`로 갑니다. 배포 절차는 [worker/README.md](worker/README.md)에 있습니다.
    «비공개»나 «주소 오류»는 어느 경로로 물어도 같으므로 폴백하지 않습니다.
 
-변수는 GitHub 저장소의 Actions → Variables에 넣습니다(`site/.env.production` 주석 참고).
+변수는 GitHub 저장소의 Actions → Variables와 Vercel 프로젝트 환경 변수에 넣습니다(`site/.env.production` 주석 참고).
 둘 다 비우면 **블라블라링크 연동** 버튼을 아예 그리지 않고 렛츠도로 CSV만 남습니다.
 워커 주소에는 Cloudflare 계정 이름이 들어가므로 저장소 파일에는 적지 않습니다.
+
+### 공유 서버 (선택)
+
+공유 코드·투표·피드백·유니온 레이드 보드는 `worker-share/`가 중계합니다 — `npx wrangler deploy`로
+배포한 뒤 주소를 `VITE_SHARE_API`에 넣습니다(배포본: `nikke-calc-share.leegunwoo0325-5e6.workers.dev`).
+`wrangler.toml`의 `ALLOWED_ORIGINS`에 사이트 도메인이 있어야 합니다. 비우면 서버 탭을 그리지 않습니다.
 
 ## 라이선스
 
