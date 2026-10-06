@@ -2655,9 +2655,9 @@ describe('calculator UI', () => {
     mountCalculator(root, { catalog, settings, version: 'v1', client: new FakeClient(), storage: localStorage });
     root.querySelector<HTMLButtonElement>('[data-view-tab="fun"]')!.click();
     root.querySelector<HTMLButtonElement>('[data-fun-tab="mcp"]')!.click();
-    expect(root.querySelector('[data-mcp-guide]')?.textContent).toContain('ChatGPT');
-    expect(root.querySelector('[data-mcp-guide]')?.textContent).toContain('Claude');
-    expect(root.querySelector<HTMLInputElement>('[data-mcp-url]')?.value).toBe('https://nikke-calc-mcp.onrender.com/mcp');
+    // 공개 중계가 이 배포의 오리진을 거절해 독립 서버를 올리기 전까지 준비중 안내다.
+    expect(root.querySelector('[data-mcp-guide]')?.textContent).toContain('준비 중');
+    expect(root.querySelector('[data-mcp-url]')).toBeNull();
     root.querySelector<HTMLButtonElement>('[data-fun-tab="skills"]')!.click();
     expect(root.querySelector('[data-mcp-guide]')).toBeNull();
   });
