@@ -647,7 +647,7 @@ export type Simulate = (squad: string[], characters: DeckState['characters'],
 // ── 화면 ────────────────────────────────────────────────────────────────────
 
 import { areaToOverrides, consoleFrom, emptyConsole, pickArea } from './blablalink';
-import type { RawProfile } from './blablalink';
+import { syncProfile } from './blabla-source';
 import { csvBlob, csvFileName, csvText } from './export-csv';
 import { requestForDeck } from './model';
 import { mountSharePanel, squadPreview, type SharePanel } from './share-panel';
@@ -983,22 +983,18 @@ export function mountUnionRaid(hosts: UnionHosts, deps: UnionDeps): UnionHandle 
     await spaced();
     row.state = 'scanning';
     try {
-      const response = await fetch(`${deps.proxy}/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profileUrl: row.openid,
-          ...(row.area > 0 ? { area: row.area } : {}),
-        }),
+      const { ok, status, payload } = await syncProfile({
+        profileUrl: row.openid,
+        area: row.area > 0 ? row.area : undefined,
+        proxy: deps.proxy,
       });
-      const payload = await response.json() as RawProfile & { error?: string; reason?: string };
-      if (!response.ok) {
+      if (!ok) {
         if (payload.reason !== 'private' && attempt < BACKOFF_MS.length) {
           await new Promise((done) => { setTimeout(done, BACKOFF_MS[attempt]); });
           return scanOne(row, attempt + 1);
         }
         row.state = payload.reason === 'private' ? 'private' : 'error';
-        row.note = payload.reason === 'private' ? '니케 목록 비공개' : (payload.error ?? `조회 실패 (${response.status})`);
+        row.note = payload.reason === 'private' ? '니케 목록 비공개' : (payload.error ?? `조회 실패 (${status})`);
         return;
       }
       const area = pickArea(payload, row.area > 0 ? row.area : undefined);

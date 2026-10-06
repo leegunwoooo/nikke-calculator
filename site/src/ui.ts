@@ -16,8 +16,8 @@ import {
   looksLikeProfileUrl,
   pickArea,
   synchroFrom,
-  type RawProfile,
 } from './blablalink';
+import { NIKKE_API, syncProfile } from './blabla-source';
 import { parseRosterCsv } from './csv-import';
 import { createSkillPlanner } from './skill-planner-ui';
 import { PLANNER_KEY } from './skill-planner';
@@ -458,6 +458,9 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
       : { ...char, aliases: [...(char.aliases ?? []), localized] };
   });
   const blablaProxy = (deps.blablaProxy ?? BLABLA_PROXY).trim().replace(/\/+$/, '');
+  // 프로필 동기화 경로가 하나라도 있으면 연동 UI를 그린다 — nikke-api는 기본값이
+  // 항상 있고, 프록시는 그쪽이 닿지 않을 때의 폴백이다(`blabla-source.ts`).
+  const hasSyncSource = blablaProxy !== '' || NIKKE_API !== '';
   /** 유니온 탭 손잡이. 프록시가 없어 탭을 안 만든 배포에서는 끝까지 비어 있다. */
   let unionHandle: UnionHandle | null = null;
   let raidHandle: RaidHandle | null = null;
@@ -769,7 +772,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
 
       <nav class="view-tabs" aria-label="화면 전환">
         <button type="button" class="view-tab is-on" data-view-tab="calc" aria-pressed="true">계산기</button>
-        ${blablaProxy ? '<button type="button" class="view-tab" data-view-tab="union" aria-pressed="false">유니온 레이드<b class="tab-beta">BETA</b></button>' : ''}
+        ${hasSyncSource ? '<button type="button" class="view-tab" data-view-tab="union" aria-pressed="false">유니온 레이드<b class="tab-beta">BETA</b></button>' : ''}
         <button type="button" class="view-tab" data-view-tab="enikk" aria-pressed="false">ENIKK 조합 가져오기</button>
         <button type="button" class="view-tab" data-view-tab="fun" aria-pressed="false">편의 기능</button>
         <button type="button" class="view-tab" data-view-tab="links" aria-pressed="false">외부고리</button>
@@ -796,7 +799,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
         <div class="links-grid" data-links-grid></div>
       </section>
 
-      ${blablaProxy ? `
+      ${hasSyncSource ? `
       <section class="panel union-panel" data-view="union" aria-labelledby="union-heading" hidden>
         <div class="section-heading">
           <div><p class="step">UNION</p><h2 id="union-heading">유니온 레이드 <b class="beta-tag">BETA</b></h2></div>
@@ -950,7 +953,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
                 </label>
                 <button type="button" class="roster-info" data-doro-open aria-label="렛츠도로 CSV 받는 법" title="렛츠도로에서 CSV 받는 법">i</button>
               </span>
-              ${blablaProxy ? `
+              ${hasSyncSource ? `
               <span class="roster-import-group">
                 <button type="button" class="roster-import" data-blabla-open title="블라블라링크 프로필 URL로 보유 니케의 육성을 한 번에 불러옵니다">블라블라링크 연동</button>
                 <button type="button" class="roster-info" data-blabla-refresh hidden aria-label="블라블라링크 다시 불러오기" title="지난번 주소로 다시 받아 옵니다">⟳</button>
@@ -1572,7 +1575,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
         </div>
       </div>
 
-      ${blablaProxy ? `
+      ${hasSyncSource ? `
       <div class="custom-modal" data-blabla-modal hidden>
         <div class="custom-card doro-card" role="dialog" aria-label="블라블라링크 연동">
           <div class="custom-head"><h2>블라블라링크 연동</h2><button type="button" class="custom-close" data-blabla-close aria-label="닫기">✕</button></div>
@@ -6420,7 +6423,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
   });
 
   // 블라블라링크 연동. 프록시가 설정된 빌드에서만 마크업이 있으므로 없으면 통째로 건너뛴다.
-  if (blablaProxy) {
+  if (hasSyncSource) {
     const blablaModal = element<HTMLElement>(root, '[data-blabla-modal]');
     const blablaServer = element<HTMLSelectElement>(root, '[data-blabla-server]');
     const blablaUrl = element<HTMLInputElement>(root, '[data-blabla-url]');
@@ -6479,16 +6482,12 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
       if (from) updateRosterNote('블라블라링크에서 다시 받는 중…');
       setStatus('블라블라링크에서 받는 중… 니케가 많으면 몇 초 걸립니다.');
       try {
-        const response = await fetch(`${blablaProxy}/sync`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profileUrl: url,
-            ...(selectedArea === undefined ? {} : { area: selectedArea }),
-          }),
+        const { ok, status, payload } = await syncProfile({
+          profileUrl: url,
+          area: selectedArea,
+          proxy: blablaProxy,
         });
-        const payload = await response.json() as RawProfile & { error?: string };
-        if (!response.ok) throw new Error(payload.error ?? `동기화에 실패했습니다 (${response.status}).`);
+        if (!ok) throw new Error(payload.error ?? `동기화에 실패했습니다 (${status}).`);
 
         const area = pickArea(payload, selectedArea);
         if (!area) throw new Error('니케 목록이 비어 있습니다.');
@@ -6611,7 +6610,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
     const proxyStatus = element<HTMLButtonElement>(root, '[data-proxy-status]');
     let proxyChecked = false;
     const checkProxy = async () => {
-      if (!BLABLA_PROXY) { proxyStatus.textContent = '블라블라링크 프록시 없음'; proxyStatus.classList.add('is-warn'); return; }
+      if (!BLABLA_PROXY) { proxyStatus.textContent = 'nikke-api 경로 사용 (프록시 없음)'; proxyStatus.classList.add('is-ok'); return; }
       proxyStatus.textContent = '프록시 확인 중…';
       proxyStatus.classList.remove('is-warn', 'is-ok');
       try {
@@ -7987,7 +7986,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
   // ── 유니온 레이드 (BETA) ────────────────────────────────────────────────
   // 프록시가 있어야 유니온원 스펙을 받아 올 수 있다 — 없으면 탭 자체를 안 그렸다.
   const unionPanel = root.querySelector<HTMLElement>('[data-view="union"]');
-  if (unionPanel && blablaProxy) {
+  if (unionPanel && hasSyncSource) {
     unionHandle = mountUnionRaid({ panel: unionPanel }, {
       proxy: blablaProxy,
       shareServer,
@@ -8064,7 +8063,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
   const skillPlanner = createSkillPlanner({
     catalog: () => catalog, roster: () => roster, storage: resolveStorage,
     importProfile: () => {
-      if (blablaProxy) element<HTMLButtonElement>(root, '[data-blabla-open]').click();
+      if (hasSyncSource) element<HTMLButtonElement>(root, '[data-blabla-open]').click();
       else switchView('calc');
     },
   });
@@ -8619,7 +8618,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
     if (!root.isConnected) return;
     const route = parseViewHash(location.hash);
     if (route.utility) funView = route.utility;
-    switchView(route.view === 'union' && !blablaProxy ? 'calc' : route.view, false);
+    switchView(route.view === 'union' && !hasSyncSource ? 'calc' : route.view, false);
     writeViewUrl(true);
   };
   restoreViewUrl();

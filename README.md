@@ -97,12 +97,22 @@ npm run check-runtime
 
 ### 블라블라링크 연동 (선택)
 
-프로필 URL로 육성 데이터를 받아 오는 기능은 프록시가 있어야 동작합니다 — 블라블라링크 API는
+프로필 URL로 육성 데이터를 받아 오는 기능은 중계 서버가 있어야 동작합니다 — 블라블라링크 API는
 CORS를 열어 두지 않고 조회에 로그인 세션을 요구하므로, 정적 사이트가 직접 부를 수 없습니다.
-배포 절차는 [worker/README.md](worker/README.md)에 있고, 배포한 주소를 GitHub 저장소 변수
-`VITE_BLABLA_PROXY`(Settings → Secrets and variables → Actions → Variables)에 넣으면 사이트에
-**블라블라링크 연동** 버튼이 생깁니다. 값을 비우면 그 버튼을 아예 그리지 않고 렛츠도로
-CSV만 남습니다. 워커 주소에는 Cloudflare 계정 이름이 들어가므로 저장소 파일에는 적지 않습니다.
+
+이 저장소는 두 경로를 둡니다(`site/src/blabla-source.ts`).
+
+1. **nikke-api (기본)** — `VITE_NIKKE_API`로 가리키는 니케 API의
+   `GET /api/user/:blablaid/roster`를 부릅니다. 변수를 비우면 기본 배포본
+   (`nikke-api-gunwoos-projects.vercel.app`)을 쓰고, 서버 측 자격증명으로 매 호출
+   세션을 새로 받으므로 쿠키 갱신이 필요 없습니다.
+2. **Cloudflare 프록시 (폴백)** — nikke-api가 죽어 있을 때만 `VITE_BLABLA_PROXY`의
+   워커 `/sync`로 갑니다. 배포 절차는 [worker/README.md](worker/README.md)에 있습니다.
+   «비공개»나 «주소 오류»는 어느 경로로 물어도 같으므로 폴백하지 않습니다.
+
+변수는 GitHub 저장소의 Actions → Variables에 넣습니다(`site/.env.production` 주석 참고).
+둘 다 비우면 **블라블라링크 연동** 버튼을 아예 그리지 않고 렛츠도로 CSV만 남습니다.
+워커 주소에는 Cloudflare 계정 이름이 들어가므로 저장소 파일에는 적지 않습니다.
 
 ## 라이선스
 
