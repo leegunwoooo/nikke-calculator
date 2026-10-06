@@ -1,8 +1,8 @@
 # NIKKE 스쿼드 계산기
 
-기존 Python 시뮬레이션 엔진을 웹 브라우저 안에서 실행하는 정적 스쿼드 대미지 계산기입니다.
+TypeScript 시뮬레이션 엔진을 웹 브라우저 안에서 실행하는 정적 스쿼드 대미지 계산기입니다.
 
-서비스: <https://moris-kr.github.io/nikke-calc/>
+서비스: <https://nikke-calculator-xi.vercel.app/> (원본: <https://moris-kr.github.io/nikke-calc/>)
 
 원본 계산 엔진: <https://github.com/Jgaram/nikke-calc>
 
