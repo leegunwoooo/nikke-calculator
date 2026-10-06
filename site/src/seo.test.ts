@@ -13,7 +13,9 @@ describe('검색엔진에 걸리는 자리', () => {
     // 여러 개면 어느 것이 정본인지 엔진이 고르게 되고, 없으면 주소가 갈린다.
     const canonical = [...html.matchAll(/<link\s+rel="canonical"[^>]*>/g)];
     expect(canonical).toHaveLength(1);
-    expect(canonical[0]![0]).toContain('https://moris-kr.github.io/nikke-calc/');
+    // 소스는 배포 주소를 %SITE_ORIGIN% 자리에 둔다 — vite transformIndexHtml이
+    // 서빙 때 실제 오리진으로 채우므로, 여기서는 자리가 있는지만 본다.
+    expect(canonical[0]![0]).toContain('href="%SITE_ORIGIN%"');
   });
 
   it('검색 결과에 실릴 설명이 짧지 않다', () => {
@@ -35,7 +37,7 @@ describe('검색엔진에 걸리는 자리', () => {
     expect(block).not.toBeNull();
     const data = JSON.parse(block![1]!) as Record<string, unknown>;
     expect(data['@type']).toBe('WebApplication');
-    expect(data.url).toBe('https://moris-kr.github.io/nikke-calc/');
+    expect(data.url).toBe('%SITE_ORIGIN%');
   });
 
   it('자바스크립트를 안 돌리는 크롤러에게도 읽을 글이 있다', () => {
@@ -88,6 +90,6 @@ describe('기능별 검색 가이드',()=>{
   const sitemap=readFileSync(join(root,'public/sitemap.xml'),'utf8');
   for(const page of pages)expect(sitemap).toContain(`/guides/${page.slug}/</loc>`);
   expect(sitemap).not.toContain('#/');
-  expect(html.slice(html.indexOf('</main>'))).toContain('href="/nikke-calc/guides/"');
+  expect(html.slice(html.indexOf('</main>'))).toContain('href="%BASE_URL%guides/"');
  });
 });
