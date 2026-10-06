@@ -2,6 +2,19 @@
 import type { BrowserMcpConnection } from './mcp-browser';
 export const MCP_URL = 'https://nikke-calc-mcp.onrender.com/mcp';
 
+// 지금 켜 있는 중계 서버는 원본 배포의 오리진만 허용한다 — 이 배포에서 연결하면
+// ORIGIN_DENIED로 거절된다. 독립 중계 서버를 올리기 전까지 탭은 준비중 안내로 둔다.
+export function renderMcpPending(host: HTMLElement): void {
+  host.innerHTML = `
+    <section class="mcp-guide" data-mcp-guide aria-labelledby="mcp-heading">
+      <header><p class="step">AI × NIKKE CALCULATOR</p>
+        <h3 id="mcp-heading">AI 연결 준비 중</h3>
+        <p>ChatGPT·Claude가 요청한 계산을 이 브라우저에서 실행하는 연결 기능을 준비하고 있습니다.
+           중계 서버가 정비되는 대로 열겠습니다.</p>
+      </header>
+    </section>`;
+}
+
 export function renderMcpGuide(host: HTMLElement, connection?: BrowserMcpConnection): void {
   host.innerHTML = `
     <section class="mcp-guide" data-mcp-guide aria-labelledby="mcp-heading">
