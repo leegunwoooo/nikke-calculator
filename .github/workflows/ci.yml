@@ -1,6 +1,4 @@
-# PR 검증. `pages.yml`이 master push를 이미 전부 검사하고 배포까지 하므로, 여기서는
-# **PR과 그 밖의 브랜치**만 맡는다 — 지금까지 그쪽이 통째로 비어 있었다.
-# (master를 여기서도 돌리면 같은 7분짜리 스냅샷을 두 번 태우게 된다)
+# PR과 main push 검증. 배포는 Vercel Git 연동이 담당한다 — 여기서는 테스트만 한다.
 #
 # 통과 여부만으로는 리뷰가 안 된다. 계산기를 고치면 baseline도 같이 고쳐 PR에 넣으므로
 # **회귀는 초록불로 지나가기 때문**이다. 실제로 읽어야 할 것은 마지막 단계가 PR 요약에
@@ -10,6 +8,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
