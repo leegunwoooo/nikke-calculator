@@ -134,6 +134,11 @@
       "id": "official-26",
       "url": "https://nikke-en.com/newsdetail.html?content_id=39c0a1baaa6e2a4974a8f58a8e859cbd14ff&sid=494&from=list&col_name=IMPORTANT",
       "title": "Update on December 30"
+    },
+    {
+      "id": "lounge-1",
+      "url": "https://game.naver.com/lounge/nikke/board/detail/8274097",
+      "title": "Pick Up 모집 안내 「벨로타 : 펌킨 위치」 (공식 라운지)"
     }
   ],
   "events": [
@@ -619,6 +624,21 @@
         "official-1"
       ],
       "note": "공식 발표된 예정 픽업. 2026-09-24 05:00 시작, 2026-10-15 04:59:59 종료 (한국 시간). 특수 모집 후 일반 모집에 추가됩니다."
+    },
+    {
+      "id": "p202610-01",
+      "start": "2026-10-08",
+      "end": "2026-10-28",
+      "names": [
+        "벨로타 : 펌킨 위치"
+      ],
+      "kind": "new",
+      "limited": false,
+      "collab": false,
+      "sourceIds": [
+        "lounge-1"
+      ],
+      "note": "할로윈 시즌 캐릭터. 공식 라운지 Pick Up 모집 안내 기준 10/8(목) 점검 완료 후 ~ 10/28(수) 23:59 (한국 시간). 특수 모집 후 일반 모집에 추가됩니다."
     }
   ],
   "researchNotes": [

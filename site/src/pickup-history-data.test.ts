@@ -11,7 +11,10 @@ describe('published pickup archive', () => {
     const data = validatePickupHistory(read('pickup-history.json'));
     const catalog = read('catalog.json') as { name: string; image: string }[];
     const byName = new Map(catalog.map(c => [c.name, c]));
-    for (const name of new Set(data.events.flatMap(eventNames))) {
+    // 공지된 예정 픽업은 캐릭터가 아직 카탈로그에 없을 수 있다 — 시작일이 지난 기록만 검사한다.
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+    const released = data.events.filter(e => e.start <= today);
+    for (const name of new Set(released.flatMap(eventNames))) {
       expect(byName.has(name), name).toBe(true);
       expect(existsSync(new URL(byName.get(name)!.image, publicDir)), name).toBe(true);
     }
