@@ -86,11 +86,11 @@ const readJson = async (env, key, fallback) => {
 const publicItem = (item) => ({
   id: item.id,
   name: item.name,
-  auto: item.auto,
-  by: item.by,
+  auto: item.auto ?? '',
+  by: item.by ?? '',
   at: item.at,
-  up: item.up,
-  down: item.down,
+  up: item.up ?? 0,
+  down: item.down ?? 0,
   // 몇 명이 실제로 가져다 썼나. 엄지와 달리 취소가 없다.
   uses: item.uses ?? 0,
   code: item.code,
