@@ -14,8 +14,8 @@ describe('Batch12', () => {
   it('test_registered', () => {
     const skills = data();
     expect(B.every((n) => n in skills)).toBe(true);
-    // 정식 199 + 프리뷰 1(드레이크 : 그레이트 빌런 — 스킬 창작, PARSING-CHARS §프리뷰)
-    expect(Object.keys(skills).filter((n) => !n.startsWith('test_')).length).toBe(202);
+    // 정식 202 + 프리뷰 1(벨로타 : 펌킨 위치 — 출시 전 카드 전사, PARSING-CHARS §프리뷰)
+    expect(Object.keys(skills).filter((n) => !n.startsWith('test_')).length).toBe(203);
   });
 
   it('test_lily_and_aigis_contracts', () => {

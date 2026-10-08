@@ -33231,6 +33231,134 @@
       "max_stack": 1
     }
   ],
+  "벨로타 : 펌킨 위치": [
+    {
+      "source": "스킬1",
+      "type": "buff",
+      "name": "유령 분장",
+      "trigger": {
+        "timing": [
+          "full_burst_start"
+        ],
+        "condition": []
+      },
+      "target": "self",
+      "stat": "targeting_exclude",
+      "polarity": "neutral",
+      "max_stack": 1,
+      "duration": 10.0
+    },
+    {
+      "source": "스킬1",
+      "type": "buff",
+      "name": "장난 준비",
+      "trigger": {
+        "timing": [
+          "full_burst_start"
+        ],
+        "condition": []
+      },
+      "target": "self",
+      "stat": "max_hp_pct",
+      "polarity": "beneficial",
+      "values": {
+        "10": 15.84
+      },
+      "duration": 10.0
+    },
+    {
+      "source": "스킬1",
+      "type": "buff",
+      "name": "플레이풀 리틀 위치",
+      "trigger": {
+        "timing": [
+          "full_burst_start"
+        ],
+        "condition": []
+      },
+      "target": "allies_right:1",
+      "stat": "atk_caster_based_pct",
+      "polarity": "beneficial",
+      "values": {
+        "10": 44.88
+      },
+      "duration": 10.0
+    },
+    {
+      "source": "스킬2",
+      "type": "buff",
+      "name": "유령의 장난",
+      "trigger": {
+        "timing": [
+          "full_charge_hit"
+        ],
+        "condition": [
+          "self_state:유령 분장"
+        ]
+      },
+      "target": "target",
+      "stat": "received_dmg_pct",
+      "polarity": "harmful",
+      "values": {
+        "10": 10.56
+      },
+      "duration": 10.0
+    },
+    {
+      "source": "스킬2",
+      "type": "buff",
+      "name": "트릭 오어 트릿!",
+      "trigger": {
+        "timing": [
+          "full_charge_hit"
+        ],
+        "condition": []
+      },
+      "target": "allies_right:1",
+      "stat": "dot_dmg_pct",
+      "polarity": "beneficial",
+      "values": {
+        "10": 19.97
+      },
+      "duration": 5.0
+    },
+    {
+      "source": "스킬3",
+      "type": "buff",
+      "name": "해피 할로윈!",
+      "trigger": {
+        "timing": [
+          "burst_cast"
+        ],
+        "condition": []
+      },
+      "target": "allies_right:1",
+      "stat": "atk_caster_based_pct",
+      "polarity": "beneficial",
+      "values": {
+        "10": 47.52
+      },
+      "duration": 10.0
+    },
+    {
+      "source": "스킬3",
+      "type": "buff",
+      "name": "해피 할로윈! 2",
+      "trigger": {
+        "timing": [
+          "burst_cast"
+        ],
+        "condition": []
+      },
+      "target": "allies_right:1",
+      "stat": "dot_dmg_pct",
+      "polarity": "beneficial",
+      "values": {
+        "10": 27.23
+      },
+      "duration": 10.0
+    }
+  ],
   "미카": [
     {
       "source": "스킬1",

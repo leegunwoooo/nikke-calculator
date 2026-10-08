@@ -1,4 +1,22 @@
 {
+  "벨로타 : 펌킨 위치": {
+    "rarity": "SSR",
+    "element_code": "수냉",
+    "class": "지원형",
+    "manufacturer": "테트라",
+    "squad": "LittleCannon",
+    "squad_name": "리틀 캐논",
+    "burst_stage": "2",
+    "burst_cooldown": 40.0,
+    "weapon_type": "RL",
+    "max_ammo": 6,
+    "reload_time": 2.0,
+    "damage_coeff": 61.3,
+    "core_dmg_mult": 200.0,
+    "charge_time": 1.0,
+    "full_charge_mult": 250.0,
+    "preview": true
+  },
   "라피": {
     "rarity": "SR",
     "element_code": "작열",
@@ -14,10 +32,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "네온": {
     "rarity": "SR",
@@ -40,10 +58,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 224.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 224.5,
+    "core_dmg_mult": 200.0
   },
   "아니스": {
     "rarity": "SR",
@@ -60,12 +78,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 3.55,
+    "burst_energy": 7.1,
     "damage_coeff": 65.02,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 7.1,
-    "burst_energy_raw": 3.55
+    "full_charge_mult": 250.0
   },
   "네온 : 블루 오션": {
     "rarity": "SSR",
@@ -84,10 +102,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "아니스 : 스파클링 서머": {
     "rarity": "SSR",
@@ -110,10 +128,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 259.2,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 259.2,
+    "core_dmg_mult": 200.0
   },
   "라피 : 레드 후드": {
     "rarity": "SSR",
@@ -132,10 +150,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "아니스 : 스타": {
     "rarity": "SSR",
@@ -152,12 +170,12 @@
     "fire_rate": 2.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "네온 : 비전 아이": {
     "rarity": "SSR",
@@ -174,12 +192,12 @@
     "fire_rate": 5.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.75,
+    "burst_energy": 1.5,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 1.5,
-    "burst_energy_raw": 0.75
+    "full_charge_mult": 250.0
   },
   "델타": {
     "rarity": "SR",
@@ -196,12 +214,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.65,
+    "burst_energy": 5.3,
     "damage_coeff": 65.95,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.3,
-    "burst_energy_raw": 2.65
+    "full_charge_mult": 250.0
   },
   "시그널": {
     "rarity": "SSR",
@@ -218,10 +236,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "델타 : 닌자 시프": {
     "rarity": "SSR",
@@ -240,10 +258,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "폴리": {
     "rarity": "SSR",
@@ -266,6 +284,8 @@
       "per_shot": 0,
       "recovery": 0
     },
+    "burst_energy_raw": 0.2,
+    "burst_energy": 0.4,
     "damage_coeff": 201.5,
     "core_dmg_mult": 200.0,
     "favorite_item": "형사 수첩",
@@ -273,9 +293,7 @@
       1,
       3,
       2
-    ],
-    "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    ]
   },
   "미란다": {
     "rarity": "SSR",
@@ -292,6 +310,8 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.1,
+    "burst_energy": 0.2,
     "damage_coeff": 10.8,
     "core_dmg_mult": 250.0,
     "favorite_item": "롤링 페이퍼",
@@ -299,9 +319,7 @@
       3,
       2,
       1
-    ],
-    "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    ]
   },
   "키리": {
     "rarity": "SSR",
@@ -318,12 +336,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "D": {
     "rarity": "SSR",
@@ -340,10 +358,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "K": {
     "rarity": "SSR",
@@ -360,10 +378,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 4.55,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 4.55,
+    "core_dmg_mult": 200.0
   },
   "D : 킬러 와이프": {
     "rarity": "SSR",
@@ -380,12 +398,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "벨로타": {
     "rarity": "SR",
@@ -402,12 +420,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 350.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 350.0
   },
   "미카": {
     "rarity": "SR",
@@ -424,12 +442,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "미카 : 스노우 버디": {
     "rarity": "SSR",
@@ -446,10 +464,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 11.7,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 11.7,
+    "core_dmg_mult": 250.0
   },
   "브리드": {
     "rarity": "SSR",
@@ -466,10 +484,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.29,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 14.29,
+    "core_dmg_mult": 200.0
   },
   "솔린": {
     "rarity": "SSR",
@@ -486,10 +504,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 5.85,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 5.85,
+    "core_dmg_mult": 250.0
   },
   "디젤": {
     "rarity": "SSR",
@@ -508,6 +526,8 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.05,
+    "burst_energy": 0.1,
     "damage_coeff": 5.38,
     "core_dmg_mult": 200.0,
     "favorite_item": "장난감 기차 세트",
@@ -515,9 +535,7 @@
       2,
       3,
       1
-    ],
-    "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    ]
   },
   "브리드 : 사일런트 트랙": {
     "rarity": "SSR",
@@ -540,10 +558,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "솔린 : 프로스트 티켓": {
     "rarity": "SSR",
@@ -566,10 +584,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "디젤 : 윈터 스위츠": {
     "rarity": "SSR",
@@ -586,12 +604,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "센티": {
     "rarity": "SSR",
@@ -608,6 +626,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 3.45,
+    "burst_energy": 6.9,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -617,9 +637,7 @@
       2,
       1,
       3
-    ],
-    "burst_energy": 6.9,
-    "burst_energy_raw": 3.45
+    ]
   },
   "리타": {
     "rarity": "SSR",
@@ -636,10 +654,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "엠마": {
     "rarity": "SSR",
@@ -658,10 +676,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "베스티": {
     "rarity": "SSR",
@@ -678,12 +696,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "은화": {
     "rarity": "SSR",
@@ -700,12 +718,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.9,
+    "burst_energy": 5.8,
     "damage_coeff": 71.07,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.8,
-    "burst_energy_raw": 2.9
+    "full_charge_mult": 250.0
   },
   "엠마 : 택티컬 업": {
     "rarity": "SSR",
@@ -724,10 +742,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "베스티 : 택티컬 업": {
     "rarity": "SSR",
@@ -744,12 +762,12 @@
     "fire_rate": 3.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.65,
+    "burst_energy": 1.3,
     "damage_coeff": 22.44,
     "core_dmg_mult": 200.0,
     "charge_time": 2.0,
-    "full_charge_mult": 200.0,
-    "burst_energy": 1.3,
-    "burst_energy_raw": 0.65
+    "full_charge_mult": 200.0
   },
   "은화 : 택티컬 업": {
     "rarity": "SSR",
@@ -766,12 +784,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "라플라스": {
     "rarity": "SSR",
@@ -788,6 +806,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.45,
+    "burst_energy": 2.9,
     "damage_coeff": 63.11,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -797,9 +817,7 @@
       2,
       3,
       1
-    ],
-    "burst_energy": 2.9,
-    "burst_energy_raw": 1.45
+    ]
   },
   "드레이크": {
     "rarity": "SSR",
@@ -822,6 +840,8 @@
       "per_shot": 0,
       "recovery": 0
     },
+    "burst_energy_raw": 0.45,
+    "burst_energy": 0.9,
     "damage_coeff": 214.3,
     "core_dmg_mult": 200.0,
     "favorite_item": "빌런 피규어",
@@ -829,9 +849,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    ]
   },
   "맥스웰": {
     "rarity": "SSR",
@@ -848,12 +866,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "라플라스 : 얼티밋 히어로": {
     "rarity": "SSR",
@@ -870,12 +888,12 @@
     "fire_rate": 5.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.5,
+    "burst_energy": 3.0,
     "damage_coeff": 2.5,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 3.0,
-    "burst_energy_raw": 1.5
+    "full_charge_mult": 250.0
   },
   "드레이크 : 그레이트 빌런": {
     "rarity": "SSR",
@@ -898,10 +916,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "맥스웰 : 오디너리 미케닉": {
     "rarity": "SSR",
@@ -918,12 +936,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "크로우": {
     "rarity": "SSR",
@@ -940,10 +958,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 5.59,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 5.59,
+    "core_dmg_mult": 250.0
   },
   "자칼": {
     "rarity": "SSR",
@@ -960,12 +978,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 3.55,
+    "burst_energy": 7.1,
     "damage_coeff": 65.02,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 7.1,
-    "burst_energy_raw": 3.55
+    "full_charge_mult": 250.0
   },
   "바이퍼": {
     "rarity": "SSR",
@@ -988,6 +1006,8 @@
       "per_shot": 0,
       "recovery": 0
     },
+    "burst_energy_raw": 0.45,
+    "burst_energy": 0.9,
     "damage_coeff": 220.4,
     "core_dmg_mult": 200.0,
     "favorite_item": "첫 휴대폰과 연락처 수첩",
@@ -995,9 +1015,7 @@
       1,
       3,
       2
-    ],
-    "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    ]
   },
   "E.H.": {
     "rarity": "SSR",
@@ -1014,10 +1032,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "N102": {
     "rarity": "SR",
@@ -1034,12 +1052,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 350.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 350.0
   },
   "앤 : 미라클 페어리": {
     "rarity": "SSR",
@@ -1056,12 +1074,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "메어리": {
     "rarity": "SSR",
@@ -1084,10 +1102,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "페퍼": {
     "rarity": "SSR",
@@ -1110,10 +1128,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 231.6,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 231.6,
+    "core_dmg_mult": 200.0
   },
   "메어리 : 베이 갓데스": {
     "rarity": "SSR",
@@ -1130,12 +1148,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.65,
+    "burst_energy": 5.3,
     "damage_coeff": 65.95,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.3,
-    "burst_energy_raw": 2.65
+    "full_charge_mult": 250.0
   },
   "슈가": {
     "rarity": "SSR",
@@ -1158,6 +1176,8 @@
       "per_shot": 0,
       "recovery": 0
     },
+    "burst_energy_raw": 0.45,
+    "burst_energy": 0.9,
     "damage_coeff": 231.6,
     "core_dmg_mult": 200.0,
     "favorite_item": "기념 열쇠고리",
@@ -1165,9 +1185,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    ]
   },
   "밀크": {
     "rarity": "SSR",
@@ -1184,6 +1202,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -1193,9 +1213,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    ]
   },
   "프림": {
     "rarity": "SSR",
@@ -1212,6 +1230,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.65,
+    "burst_energy": 5.3,
     "damage_coeff": 65.95,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -1221,9 +1241,7 @@
       1,
       3,
       2
-    ],
-    "burst_energy": 5.3,
-    "burst_energy_raw": 2.65
+    ]
   },
   "밀크 : 블루밍 바니": {
     "rarity": "SSR",
@@ -1240,12 +1258,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "율리아": {
     "rarity": "SSR",
@@ -1262,6 +1280,8 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.2,
+    "burst_energy": 0.4,
     "damage_coeff": 14.07,
     "core_dmg_mult": 200.0,
     "favorite_item": "음악 노트",
@@ -1269,9 +1289,7 @@
       2,
       1,
       3
-    ],
-    "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    ]
   },
   "유니": {
     "rarity": "SSR",
@@ -1288,12 +1306,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 350.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 350.0
   },
   "미하라": {
     "rarity": "SR",
@@ -1310,10 +1328,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 15.07,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 15.07,
+    "core_dmg_mult": 200.0
   },
   "미하라 : 본딩 체인": {
     "rarity": "SSR",
@@ -1332,10 +1350,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "프리바티": {
     "rarity": "SSR",
@@ -1352,6 +1370,8 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.2,
+    "burst_energy": 0.4,
     "damage_coeff": 13.65,
     "core_dmg_mult": 200.0,
     "favorite_item": "중앙 정부 특별 훈장",
@@ -1359,9 +1379,7 @@
       3,
       2,
       1
-    ],
-    "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    ]
   },
   "율하": {
     "rarity": "SSR",
@@ -1378,12 +1396,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.75,
+    "burst_energy": 5.5,
     "damage_coeff": 68.23,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.5,
-    "burst_energy_raw": 2.75
+    "full_charge_mult": 250.0
   },
   "애드미": {
     "rarity": "SSR",
@@ -1400,12 +1418,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.7,
+    "burst_energy": 5.4,
     "damage_coeff": 67.37,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.4,
-    "burst_energy_raw": 2.7
+    "full_charge_mult": 250.0
   },
   "길로틴": {
     "rarity": "SSR",
@@ -1424,10 +1442,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "메이든": {
     "rarity": "SSR",
@@ -1450,10 +1468,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 231.6,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 231.6,
+    "core_dmg_mult": 200.0
   },
   "길로틴 : 윈터 슬레이어": {
     "rarity": "SSR",
@@ -1470,10 +1488,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "메이든 : 아이스 로즈": {
     "rarity": "SSR",
@@ -1490,12 +1508,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.82,
+    "burst_energy": 3.64,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 3.64,
-    "burst_energy_raw": 1.82
+    "full_charge_mult": 250.0
   },
   "루드밀라": {
     "rarity": "SSR",
@@ -1512,10 +1530,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.32,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.15,
     "burst_energy": 0.3,
-    "burst_energy_raw": 0.15
+    "damage_coeff": 10.32,
+    "core_dmg_mult": 200.0
   },
   "앨리스": {
     "rarity": "SSR",
@@ -1532,12 +1550,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 350.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 350.0
   },
   "토브": {
     "rarity": "SSR",
@@ -1554,6 +1572,8 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.2,
+    "burst_energy": 0.4,
     "damage_coeff": 14.2,
     "core_dmg_mult": 200.0,
     "favorite_item": "파이어 스타터",
@@ -1561,9 +1581,7 @@
       1,
       3,
       2
-    ],
-    "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    ]
   },
   "네베": {
     "rarity": "SR",
@@ -1586,10 +1604,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "루드밀라 : 윈터 오너": {
     "rarity": "SSR",
@@ -1608,10 +1626,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.86,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.86,
+    "core_dmg_mult": 200.0
   },
   "앨리스 : 원더랜드 바니": {
     "rarity": "SSR",
@@ -1628,10 +1646,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "루피": {
     "rarity": "SSR",
@@ -1648,10 +1666,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "얀": {
     "rarity": "SSR",
@@ -1668,12 +1686,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 350.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 350.0
   },
   "도라": {
     "rarity": "SSR",
@@ -1690,12 +1708,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "루피 : 윈터 쇼퍼": {
     "rarity": "SSR",
@@ -1712,10 +1730,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "엑시아": {
     "rarity": "SSR",
@@ -1732,6 +1750,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -1741,9 +1761,7 @@
       2,
       3,
       1
-    ],
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    ]
   },
   "노벨": {
     "rarity": "SSR",
@@ -1760,10 +1778,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "스노우 화이트": {
     "rarity": "SSR",
@@ -1780,10 +1798,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.71,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 14.71,
+    "core_dmg_mult": 200.0
   },
   "라푼젤": {
     "rarity": "SSR",
@@ -1800,12 +1818,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.45,
+    "burst_energy": 2.9,
     "damage_coeff": 62.95,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.9,
-    "burst_energy_raw": 1.45
+    "full_charge_mult": 250.0
   },
   "홍련": {
     "rarity": "SSR",
@@ -1822,10 +1840,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 27.08,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 27.08,
+    "core_dmg_mult": 200.0
   },
   "나유타": {
     "rarity": "SSR",
@@ -1842,10 +1860,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "스노우 화이트 : 이노센트 데이즈": {
     "rarity": "SSR",
@@ -1862,10 +1880,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "홍련 : 흑영": {
     "rarity": "SSR",
@@ -1882,12 +1900,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.25,
+    "burst_energy": 2.5,
     "damage_coeff": 57.29,
     "core_dmg_mult": 200.0,
     "charge_time": 0.3,
-    "full_charge_mult": 150.0,
-    "burst_energy": 2.5,
-    "burst_energy_raw": 1.25
+    "full_charge_mult": 150.0
   },
   "라푼젤 : 퓨어 그레이스": {
     "rarity": "SSR",
@@ -1904,12 +1922,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "하란": {
     "rarity": "SSR",
@@ -1926,12 +1944,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.9,
+    "burst_energy": 5.8,
     "damage_coeff": 70.89,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.8,
-    "burst_energy_raw": 2.9
+    "full_charge_mult": 250.0
   },
   "이사벨": {
     "rarity": "SSR",
@@ -1954,10 +1972,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 210.7,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 210.7,
+    "core_dmg_mult": 200.0
   },
   "노아": {
     "rarity": "SSR",
@@ -1974,12 +1992,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 2,
+    "burst_energy_raw": 1.5,
+    "burst_energy": 3.0,
     "damage_coeff": 32.02,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 3.0,
-    "burst_energy_raw": 1.5
+    "full_charge_mult": 250.0
   },
   "도로시": {
     "rarity": "SSR",
@@ -1996,10 +2014,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "도로시 : 세렌디피티": {
     "rarity": "SSR",
@@ -2022,10 +2040,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "루마니": {
     "rarity": "SSR",
@@ -2042,12 +2060,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 3.25,
+    "burst_energy": 6.5,
     "damage_coeff": 56.38,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 6.5,
-    "burst_energy_raw": 3.25
+    "full_charge_mult": 250.0
   },
   "에피넬": {
     "rarity": "SSR",
@@ -2064,10 +2082,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "폴크방": {
     "rarity": "SSR",
@@ -2084,10 +2102,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.29,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 14.29,
+    "core_dmg_mult": 200.0
   },
   "모더니아": {
     "rarity": "SSR",
@@ -2106,10 +2124,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 7.71,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 7.71,
+    "core_dmg_mult": 200.0
   },
   "니힐리스타": {
     "rarity": "SSR",
@@ -2126,12 +2144,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "리버렐리오": {
     "rarity": "SSR",
@@ -2148,12 +2166,12 @@
     "fire_rate": 3.3333,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.5,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "블랑": {
     "rarity": "SSR",
@@ -2170,10 +2188,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "누아르": {
     "rarity": "SSR",
@@ -2196,10 +2214,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 204.6,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 204.6,
+    "core_dmg_mult": 200.0
   },
   "루주": {
     "rarity": "SSR",
@@ -2216,12 +2234,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.9,
+    "burst_energy": 5.8,
     "damage_coeff": 71.07,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.8,
-    "burst_energy_raw": 2.9
+    "full_charge_mult": 250.0
   },
   "로산나": {
     "rarity": "SSR",
@@ -2240,6 +2258,8 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.05,
+    "burst_energy": 0.1,
     "damage_coeff": 5.1,
     "core_dmg_mult": 200.0,
     "favorite_item": "인장 반지",
@@ -2247,9 +2267,7 @@
       2,
       3,
       1
-    ],
-    "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    ]
   },
   "목단": {
     "rarity": "SSR",
@@ -2266,6 +2284,8 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.25,
+    "burst_energy": 0.5,
     "damage_coeff": 14.71,
     "core_dmg_mult": 200.0,
     "favorite_item": "모란꽃 모양 비녀",
@@ -2273,9 +2293,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    ]
   },
   "사쿠라": {
     "rarity": "SSR",
@@ -2292,12 +2310,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.7,
+    "burst_energy": 5.4,
     "damage_coeff": 67.0,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.4,
-    "burst_energy_raw": 2.7
+    "full_charge_mult": 250.0
   },
   "로산나 : 시크 오션": {
     "rarity": "SSR",
@@ -2314,10 +2332,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "사쿠라 : 블룸 인 서머": {
     "rarity": "SSR",
@@ -2334,10 +2352,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "마나": {
     "rarity": "SSR",
@@ -2354,10 +2372,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 15.07,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 15.07,
+    "core_dmg_mult": 200.0
   },
   "에테르": {
     "rarity": "SR",
@@ -2380,10 +2398,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 214.3,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 214.3,
+    "core_dmg_mult": 200.0
   },
   "솔져 E.G.": {
     "rarity": "R",
@@ -2400,10 +2418,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.01,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 14.01,
+    "core_dmg_mult": 200.0
   },
   "솔져 F.A.": {
     "rarity": "R",
@@ -2426,10 +2444,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 214.3,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 214.3,
+    "core_dmg_mult": 200.0
   },
   "프로덕트 08": {
     "rarity": "R",
@@ -2446,12 +2464,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "프로덕트 12": {
     "rarity": "R",
@@ -2470,10 +2488,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.67,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.67,
+    "core_dmg_mult": 200.0
   },
   "iDoll 플라워": {
     "rarity": "R",
@@ -2490,12 +2508,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "iDoll 오션": {
     "rarity": "R",
@@ -2512,10 +2530,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "솔져 O.W.": {
     "rarity": "R",
@@ -2532,10 +2550,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 9.36,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 9.36,
+    "core_dmg_mult": 200.0
   },
   "프로덕트 23": {
     "rarity": "R",
@@ -2558,10 +2576,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 231.6,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 231.6,
+    "core_dmg_mult": 200.0
   },
   "iDoll 썬": {
     "rarity": "R",
@@ -2578,10 +2596,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.71,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 14.71,
+    "core_dmg_mult": 200.0
   },
   "에이드": {
     "rarity": "SSR",
@@ -2598,10 +2616,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.71,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 14.71,
+    "core_dmg_mult": 200.0
   },
   "코코아": {
     "rarity": "SSR",
@@ -2618,12 +2636,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "소다": {
     "rarity": "SSR",
@@ -2642,10 +2660,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "프리바티 : 언카인드 메이드": {
     "rarity": "SSR",
@@ -2668,10 +2686,10 @@
       "per_shot": 18,
       "recovery": 105
     },
-    "damage_coeff": 182.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 182.1,
+    "core_dmg_mult": 200.0
   },
   "소다 : 트윙클링 바니": {
     "rarity": "SSR",
@@ -2694,10 +2712,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 231.6,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 231.6,
+    "core_dmg_mult": 200.0
   },
   "에이드 : 에이전트 바니": {
     "rarity": "SSR",
@@ -2714,12 +2732,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "벨벳": {
     "rarity": "SSR",
@@ -2736,12 +2754,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "마르차나": {
     "rarity": "SSR",
@@ -2764,10 +2782,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "마르차나 : 마린 스터디": {
     "rarity": "SSR",
@@ -2784,10 +2802,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "크라운": {
     "rarity": "SSR",
@@ -2806,10 +2824,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "차임": {
     "rarity": "SSR",
@@ -2826,10 +2844,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "마스트": {
     "rarity": "SSR",
@@ -2846,10 +2864,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "앵커": {
     "rarity": "SR",
@@ -2866,12 +2884,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "헬름": {
     "rarity": "SSR",
@@ -2888,6 +2906,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -2897,9 +2917,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    ]
   },
   "헬름 : 아쿠아마린": {
     "rarity": "SSR",
@@ -2916,10 +2934,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "마스트 : 로망틱 메이드": {
     "rarity": "SSR",
@@ -2938,10 +2956,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "앵커 : 이노센트 메이드": {
     "rarity": "SSR",
@@ -2958,12 +2976,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "킬로": {
     "rarity": "SSR",
@@ -2982,10 +3000,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "네로": {
     "rarity": "SSR",
@@ -3002,10 +3020,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.39,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.39,
+    "core_dmg_mult": 200.0
   },
   "비스킷": {
     "rarity": "SSR",
@@ -3022,12 +3040,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "레오나": {
     "rarity": "SSR",
@@ -3050,10 +3068,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "츠바이": {
     "rarity": "SSR",
@@ -3076,6 +3094,8 @@
       "per_shot": 0,
       "recovery": 0
     },
+    "burst_energy_raw": 0.35,
+    "burst_energy": 0.7,
     "damage_coeff": 100.75,
     "core_dmg_mult": 200.0,
     "favorite_item": "네잎클로버 책갈피",
@@ -3083,9 +3103,7 @@
       3,
       2,
       1
-    ],
-    "burst_energy": 0.7,
-    "burst_energy_raw": 0.35
+    ]
   },
   "아인": {
     "rarity": "SSR",
@@ -3102,12 +3120,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "라이": {
     "rarity": "SSR",
@@ -3124,10 +3142,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 9.15,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 9.15,
+    "core_dmg_mult": 200.0
   },
   "길티": {
     "rarity": "SSR",
@@ -3150,10 +3168,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 231.4,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 231.4,
+    "core_dmg_mult": 200.0
   },
   "신": {
     "rarity": "SSR",
@@ -3170,10 +3188,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "퀀시": {
     "rarity": "SSR",
@@ -3190,10 +3208,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 4.47,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 4.47,
+    "core_dmg_mult": 200.0
   },
   "퀀시 : 이스케이프 퀸": {
     "rarity": "SSR",
@@ -3210,10 +3228,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 5.06,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.074,
     "burst_energy": 0.148,
-    "burst_energy_raw": 0.074
+    "damage_coeff": 5.06,
+    "core_dmg_mult": 250.0
   },
   "플로라": {
     "rarity": "SSR",
@@ -3232,6 +3250,8 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.05,
+    "burst_energy": 0.1,
     "damage_coeff": 5.57,
     "core_dmg_mult": 200.0,
     "favorite_item": "함께 만든 화분",
@@ -3239,9 +3259,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    ]
   },
   "트리나": {
     "rarity": "SSR",
@@ -3258,12 +3276,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 3.6,
+    "burst_energy": 7.2,
     "damage_coeff": 68.59,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 7.2,
-    "burst_energy_raw": 3.6
+    "full_charge_mult": 250.0
   },
   "노이즈": {
     "rarity": "SSR",
@@ -3280,12 +3298,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "볼륨": {
     "rarity": "SSR",
@@ -3302,10 +3320,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "아리아": {
     "rarity": "SSR",
@@ -3324,10 +3342,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.47,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.47,
+    "core_dmg_mult": 200.0
   },
   "아비스타": {
     "rarity": "SSR",
@@ -3346,10 +3364,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "나가": {
     "rarity": "SSR",
@@ -3372,10 +3390,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 204.8,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 204.8,
+    "core_dmg_mult": 200.0
   },
   "티아": {
     "rarity": "SSR",
@@ -3392,12 +3410,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "레드 후드": {
     "rarity": "SSR",
@@ -3414,12 +3432,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "스노우 화이트 : 헤비암즈": {
     "rarity": "SSR",
@@ -3436,12 +3454,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.2,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "일레그": {
     "rarity": "SSR",
@@ -3460,10 +3478,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "트로니": {
     "rarity": "SSR",
@@ -3480,12 +3498,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "일레그 : 붐 앤 쇼크": {
     "rarity": "SSR",
@@ -3504,10 +3522,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "신데렐라": {
     "rarity": "SSR",
@@ -3524,12 +3542,12 @@
     "fire_rate": 3.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.225,
+    "burst_energy": 0.45,
     "damage_coeff": 32.11,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 200.0,
-    "burst_energy": 0.45,
-    "burst_energy_raw": 0.225
+    "full_charge_mult": 200.0
   },
   "리틀 머메이드": {
     "rarity": "SSR",
@@ -3546,10 +3564,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "그레이브": {
     "rarity": "SSR",
@@ -3566,10 +3584,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 17.91,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.45,
     "burst_energy": 0.9,
-    "burst_energy_raw": 0.45
+    "damage_coeff": 17.91,
+    "core_dmg_mult": 200.0
   },
   "신데렐라 : 크리스탈 웨이브": {
     "rarity": "SSR",
@@ -3588,10 +3606,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "브래디": {
     "rarity": "SSR",
@@ -3608,12 +3626,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "크러스트": {
     "rarity": "SSR",
@@ -3630,12 +3648,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "소라": {
     "rarity": "SSR",
@@ -3652,12 +3670,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "베이": {
     "rarity": "SSR",
@@ -3674,6 +3692,8 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
@@ -3683,9 +3703,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    ]
   },
   "클레이": {
     "rarity": "SSR",
@@ -3702,10 +3720,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "아크레인저 블랙": {
     "rarity": "SSR",
@@ -3722,10 +3740,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "팬텀": {
     "rarity": "SSR",
@@ -3742,6 +3760,8 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 0.25,
+    "burst_energy": 0.5,
     "damage_coeff": 15.78,
     "core_dmg_mult": 200.0,
     "favorite_item": "소중한 가면들",
@@ -3749,9 +3769,7 @@
       1,
       2,
       3
-    ],
-    "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    ]
   },
   "아르카나": {
     "rarity": "SSR",
@@ -3768,12 +3786,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.5,
+    "burst_energy": 3.0,
     "damage_coeff": 64.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 3.0,
-    "burst_energy_raw": 1.5
+    "full_charge_mult": 250.0
   },
   "레이블": {
     "rarity": "SSR",
@@ -3790,10 +3808,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "아르카나 : 포츈 메이트": {
     "rarity": "SSR",
@@ -3816,10 +3834,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 222.8,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 222.8,
+    "core_dmg_mult": 200.0
   },
   "모리": {
     "rarity": "SSR",
@@ -3836,10 +3854,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "민트": {
     "rarity": "SSR",
@@ -3856,12 +3874,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "프리카": {
     "rarity": "SSR",
@@ -3878,12 +3896,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "백학": {
     "rarity": "SSR",
@@ -3900,12 +3918,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "마키마": {
     "rarity": "SSR",
@@ -3922,10 +3940,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.73,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.73,
+    "core_dmg_mult": 200.0
   },
   "파워": {
     "rarity": "SSR",
@@ -3942,12 +3960,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "히메노": {
     "rarity": "SR",
@@ -3964,12 +3982,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.9,
+    "burst_energy": 5.8,
     "damage_coeff": 70.89,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.8,
-    "burst_energy_raw": 2.9
+    "full_charge_mult": 250.0
   },
   "2B": {
     "rarity": "SSR",
@@ -3986,10 +4004,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.99,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 5.99,
+    "core_dmg_mult": 200.0
   },
   "A2": {
     "rarity": "SSR",
@@ -4006,12 +4024,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.3,
+    "burst_energy": 2.6,
     "damage_coeff": 67.65,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.6,
-    "burst_energy_raw": 1.3
+    "full_charge_mult": 250.0
   },
   "파스칼": {
     "rarity": "SR",
@@ -4028,11 +4046,11 @@
     "fire_rate": 1.5,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.15,
+    "burst_energy": 2.3,
     "damage_coeff": 75.0,
     "core_dmg_mult": 200.0,
-    "fire_mode": "auto",
-    "burst_energy": 2.3,
-    "burst_energy_raw": 1.15
+    "fire_mode": "auto"
   },
   "렘": {
     "rarity": "SSR",
@@ -4051,10 +4069,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "에밀리아": {
     "rarity": "SSR",
@@ -4071,12 +4089,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "람": {
     "rarity": "SR",
@@ -4093,12 +4111,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "아스카": {
     "rarity": "SSR",
@@ -4115,10 +4133,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 18.76,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.3,
     "burst_energy": 0.6,
-    "burst_energy_raw": 0.3
+    "damage_coeff": 18.76,
+    "core_dmg_mult": 200.0
   },
   "레이": {
     "rarity": "SSR",
@@ -4137,10 +4155,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "마리": {
     "rarity": "SSR",
@@ -4157,12 +4175,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "미사토": {
     "rarity": "SR",
@@ -4179,10 +4197,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "레이 (가칭)": {
     "rarity": "SSR",
@@ -4199,10 +4217,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 14.71,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.25,
     "burst_energy": 0.5,
-    "burst_energy_raw": 0.25
+    "damage_coeff": 14.71,
+    "core_dmg_mult": 200.0
   },
   "아스카 : WILLE": {
     "rarity": "SSR",
@@ -4221,10 +4239,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.47,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.47,
+    "core_dmg_mult": 200.0
   },
   "사쿠라 (SR)": {
     "rarity": "SR",
@@ -4241,10 +4259,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "에이다": {
     "rarity": "SSR",
@@ -4261,12 +4279,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "질": {
     "rarity": "SSR",
@@ -4283,10 +4301,10 @@
     "fire_rate": 2.5,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 71.09,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 1.1,
     "burst_energy": 2.2,
-    "burst_energy_raw": 1.1
+    "damage_coeff": 71.09,
+    "core_dmg_mult": 200.0
   },
   "클레어": {
     "rarity": "SR",
@@ -4303,12 +4321,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "이브": {
     "rarity": "SSR",
@@ -4325,10 +4343,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "레이븐": {
     "rarity": "SSR",
@@ -4345,12 +4363,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 1.4,
+    "burst_energy": 2.8,
     "damage_coeff": 61.3,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 2.8,
-    "burst_energy_raw": 1.4
+    "full_charge_mult": 250.0
   },
   "릴리": {
     "rarity": "SR",
@@ -4367,10 +4385,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 8.1,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 8.1,
+    "core_dmg_mult": 200.0
   },
   "치사토": {
     "rarity": "SSR",
@@ -4387,10 +4405,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 10.12,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 10.12,
+    "core_dmg_mult": 250.0
   },
   "타키나": {
     "rarity": "SSR",
@@ -4407,12 +4425,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "쿠루미": {
     "rarity": "SR",
@@ -4429,10 +4447,10 @@
     "fire_rate": 12.0,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 13.65,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 13.65,
+    "core_dmg_mult": 200.0
   },
   "퀸(마코토)": {
     "rarity": "SSR",
@@ -4455,10 +4473,10 @@
       "per_shot": 0,
       "recovery": 0
     },
-    "damage_coeff": 201.5,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.2,
     "burst_energy": 0.4,
-    "burst_energy_raw": 0.2
+    "damage_coeff": 201.5,
+    "core_dmg_mult": 200.0
   },
   "유키코": {
     "rarity": "SSR",
@@ -4477,10 +4495,10 @@
     "fire_rate_change_pershot": 1.6667,
     "pellets": 1,
     "muzzles": 1,
-    "damage_coeff": 5.57,
-    "core_dmg_mult": 200.0,
+    "burst_energy_raw": 0.05,
     "burst_energy": 0.1,
-    "burst_energy_raw": 0.05
+    "damage_coeff": 5.57,
+    "core_dmg_mult": 200.0
   },
   "아이기스": {
     "rarity": "SR",
@@ -4497,10 +4515,10 @@
     "fire_rate": 24.0,
     "pellets": 1,
     "muzzles": 2,
-    "damage_coeff": 5.06,
-    "core_dmg_mult": 250.0,
+    "burst_energy_raw": 0.1,
     "burst_energy": 0.2,
-    "burst_energy_raw": 0.1
+    "damage_coeff": 5.06,
+    "core_dmg_mult": 250.0
   },
   "길티 : 마이티 바니": {
     "rarity": "SSR",
@@ -4517,12 +4535,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "신 : 스위프트 바니": {
     "rarity": "SSR",
@@ -4539,12 +4557,12 @@
     "fire_rate": 1.0,
     "pellets": 1,
     "muzzles": 1,
+    "burst_energy_raw": 2.8,
+    "burst_energy": 5.6,
     "damage_coeff": 69.04,
     "core_dmg_mult": 200.0,
     "charge_time": 1.0,
-    "full_charge_mult": 250.0,
-    "burst_energy": 5.6,
-    "burst_energy_raw": 2.8
+    "full_charge_mult": 250.0
   },
   "test_B1": {
     "rarity": "SSR",

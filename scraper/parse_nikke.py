@@ -100,6 +100,13 @@ def parse_fire_mechanics(weapon: dict) -> dict:
         result["muzzles"] = int(weapon["총구"])
     if weapon.get("탄착군"):
         result["spread"] = dict(weapon["탄착군"])
+
+    # 히트당 버스트 게이지(%) — CDN 원값/10000. 없으면 키를 만들지 않는다: 프리뷰
+    # 캐릭터는 ③층(weapon_mechanics 무기군 기본값)으로 떨어져야 한다.
+    if weapon.get("버스트 에너지(발당)"):
+        result["burst_energy_raw"] = round(weapon["버스트 에너지(발당)"] / 10000, 4)
+    if weapon.get("버스트 에너지(대상)"):
+        result["burst_energy"] = round(weapon["버스트 에너지(대상)"] / 10000, 4)
     return result
 
 

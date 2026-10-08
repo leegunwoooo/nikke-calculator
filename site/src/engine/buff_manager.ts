@@ -4881,6 +4881,12 @@ export class BuffManager {
       }
       return [caster, ...pyslice(adj, n)];
     }
+    // "자신의 우측 자리 아군 N기" — 실제 편성 자리 순서 기준 시전자 오른쪽 N명. 맨 오른쪽이면 빈 배열. (벨로타 : 펌킨 위치)
+    if (ts.startsWith('allies_right:')) {
+      const n = int(ts.split(':')[1]!);
+      const idx = listIndex(this.slot_names, caster);
+      return this.slot_names.slice(idx + 1, idx + 1 + n);
+    }
     // "최종 공격력이 가장 높은 [무기] 소지 아군 N기" — 무기 필터 ∩ 공격력 top N. (레오나 `용기있는 시선 2`)
     if (ts.startsWith('allies_weapon_top_atk:')) {
       const [, wtype, cnt] = unpack(ts.split(':'), 3);

@@ -219,6 +219,10 @@ def adapt(role: dict) -> tuple[str, dict]:
             "연사증가(rpm/발)": shot.get("rate_of_fire_change_pershot", 0),
             "펠릿": shot.get("shot_count", 1),
             "총구": shot.get("muzzle_count", 1),
+            # 히트당 버스트 게이지(CDN 원값). 대상 = target 명중 기준, 발당 = 발사 기준.
+            # parsed_nikke의 burst_energy/burst_energy_raw가 여기서 온다(/10000).
+            "버스트 에너지(발당)": shot.get("burst_energy_pershot", 0),
+            "버스트 에너지(대상)": shot.get("target_burst_energy_pershot", 0),
             **({"탄착군": {
                 "start": shot["start_accuracy_circle_scale"],
                 "end": shot.get("end_accuracy_circle_scale", shot["start_accuracy_circle_scale"]),

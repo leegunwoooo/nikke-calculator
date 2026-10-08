@@ -597,6 +597,7 @@ lazy resolve: 버프 반영 스탯 기준 정렬 필요 target → `_activate()`
 | `"[캐릭터명]"` (하드코딩) | ❌ | ✅ | target 값이 스쿼드 캐릭터 이름 리터럴이면 그 캐릭터 지정 (`target in squad_names`). 이사벨(아르카나 예외)·민트(프리카). **특정 캐릭 전용 — 코드 일반화는 범위 밖(memo)** |
 | `"allies:N"` | ❌ | ✅ | 스쿼드 입력 순서 앞 N명 |
 | `"allies_adjacent:N"` | ❌ | ✅ | 양 옆 아군. 자신 포함 최대 N+1명 |
+| `"allies_right:N"` | ❌ | ✅ | 시전자의 우측 자리 아군 N기 — `slot_names` 기준 idx+1부터 N명. 맨 오른쪽이면 빈 리스트 → 무발동. 벨로타 : 펌킨 위치 |
 | `"allies_top_atk:N"` | ✅ | ✅ | `_LAZY_RESOLVE_PREFIXES` 등록됨 |
 | `"allies_top_atk_excl:N"` | ✅ | ✅ | `_LAZY_RESOLVE_PREFIXES` 등록됨. 자신 제외 |
 | `"allies_lowest_hp:N"` | ✅ | ✅ | `_LAZY_RESOLVE_PREFIXES` 등록됨 |
