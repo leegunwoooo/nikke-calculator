@@ -8,6 +8,7 @@ import {
 } from './union-raid';
 import type { BossSlot, JobResult, MemberRow } from './union-raid';
 import { encodeBattleCode, encodeShareCode } from './share-code';
+import { emptyDesign, encodeBossCode } from './boss-maker';
 import type { BattleSettings, DeckState } from './types';
 
 const battle: BattleSettings = {
@@ -179,6 +180,33 @@ describe('보스·덱 칸', () => {
   it('빈 칸은 오류가 아니고, 망가진 코드는 이유를 남긴다', () => {
     expect(readBossCode({ name: '', code: '  ', enabled: true, decks: [] }).error).toBeUndefined();
     expect(readBossCode({ name: '', code: 'NK3-쓰레기', enabled: true, decks: [] }).error).toMatch(/해석/);
+  });
+
+  it('보스 메이커 코드(NK5-)에서 전투 조건을 꺼내 읽고, 칸에는 NK3으로 적어 둔다', () => {
+    // 유레 판에 보스 메이커 코드를 그대로 붙이는 제보(댓글). 칸에 NK5를 남기면
+    // 다시 내보내는 판 코드(NK4)가 조건을 못 싣는다 — 받은 순간 NK3으로 바꿔 둔다.
+    const design = emptyDesign('보스');
+    const maker = encodeBossCode({ ...design, battleCode: encodeBattleCode(battle) });
+    const slot = readBossCode({ name: '', code: maker, enabled: true, decks: [] });
+    expect(slot.error).toBeUndefined();
+    expect(slot.code.startsWith('NK3-')).toBe(true);
+    expect(slot.battle?.duration).toBe(90);
+    expect(slot.battle?.enemyCode).toBe('전격');
+  });
+
+  it('전투 조건이 없는 보스 메이커 코드는 그 이유를 말해 준다', () => {
+    const maker = encodeBossCode(emptyDesign('조건 없는 보스'));
+    const slot = readBossCode({ name: '', code: maker, enabled: true, decks: [] });
+    expect(slot.battle).toBeUndefined();
+    expect(slot.error).toMatch(/전투 조건/);
+  });
+
+  it('중간에 공백·줄바꿈이 끼어도 코드를 읽는다', () => {
+    const code = encodeBattleCode(battle);
+    const broken = `${code.slice(0, 10)} \n${code.slice(10)}`;
+    const slot = readBossCode({ name: '', code: broken, enabled: true, decks: [] });
+    expect(slot.error).toBeUndefined();
+    expect(slot.battle?.enemyCode).toBe('전격');
   });
 
   it('조합 코드에서 니케 다섯을 뽑는다', () => {

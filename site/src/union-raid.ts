@@ -20,6 +20,7 @@ import {
   decodeBattleCode, decodeShareCode, decodeUnionCode, encodeShareCode, encodeUnionCode,
   type UnionShare,
 } from './share-code';
+import { BOSS_PREFIX, decodeBossCode } from './boss-maker';
 import { DEFAULT_SYNCHRO_LEVEL, SYNCHRO_MAX, SYNCHRO_MEASURED_MAX } from './model';
 import type { BattleSettings, DeckState, SimulationResult } from './types';
 
@@ -407,14 +408,25 @@ export function humanSeconds(seconds: number): string {
 
 /** 보스 칸 하나를 코드에서 읽는다. 빈 칸은 조용히 비운다 — 아직 안 채운 것뿐이다. */
 export function readBossCode(slot: BossSlot, synchro = DEFAULT_SYNCHRO_LEVEL): BossSlot {
-  const code = slot.code.trim();
+  const code = slot.code.replace(/\s+/g, '');
   if (!code) return { ...slot, battle: undefined, error: undefined };
   try {
-    const share = decodeBattleCode(code);
+    // 보스 메이커 코드(NK5-)도 받는다 — 전투 조건(NK3)이 안에 들어 있어 꺼내 쓰면
+    // 판에 바로 붙여넣는 흐름이 된다. 내장 코드는 NK3으로 적어 둔다 — 칸에 NK5를 남기면
+    // 다시 내보내는 판 코드(NK4)가 조건을 못 싣는다.
+    let battleCode = code;
+    if (code.startsWith(BOSS_PREFIX)) {
+      battleCode = decodeBossCode(code).battleCode ?? '';
+      if (!battleCode) {
+        return { ...slot, battle: undefined, error: '보스 코드에 전투 조건이 들어 있지 않습니다.' };
+      }
+    }
+    const share = decodeBattleCode(battleCode);
     // 싱크로와 콘솔은 코드에 담기지 않는다(계정 육성 상태다). 유니온원마다 자기 것으로 덮으므로
     // 여기서는 자리만 채워 둔다.
     return {
       ...slot,
+      code: battleCode,
       battle: { ...share, synchroLevel: synchro, console: emptyConsole() },
       error: undefined,
     };
@@ -1377,7 +1389,7 @@ export function mountUnionRaid(hosts: UnionHosts, deps: UnionDeps): UnionHandle 
       const code = document.createElement('input');
       code.type = 'text';
       code.className = 'union-code';
-      code.placeholder = '전투 조건 코드 (NK3-…)';
+      code.placeholder = '전투 조건 코드 (NK3-… 또는 보스 메이커 NK5-…)';
       code.value = boss.code;
       code.addEventListener('input', () => {
         bosses[index] = { ...readBossCode({ ...boss, code: code.value }), decks: boss.decks };

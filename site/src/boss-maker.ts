@@ -997,7 +997,7 @@ export function encodeBossCode(design: BossDesign): string {
  * 그 칸만 비운 채 나머지를 살린다.
  */
 export function decodeBossCode(code: string, catalogNames: string[] = []): BossDesign {
-  const trimmed = code.trim();
+  const trimmed = code.replace(/\s+/g, '');
   if (!trimmed) throw new Error('보스 코드를 입력해 주세요.');
   if (!trimmed.startsWith(BOSS_PREFIX)) {
     throw new Error('보스 코드는 «NK5-»로 시작합니다.');

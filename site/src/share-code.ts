@@ -93,7 +93,7 @@ export function encodeShareCode(decks: DeckState[], fiveDeckMode: boolean): stri
  * 옛 형식(NIKKE1-, 이름을 JSON으로 담던 코드)도 계속 읽되 이름만 취한다.
  */
 export function decodeShareCode(code: string, catalogNames: string[] = []): SharePayload {
-  const trimmed = code.trim();
+  const trimmed = code.replace(/\s+/g, '');
   if (!trimmed) throw new Error('공유 코드를 입력해 주세요.');
 
   if (trimmed.startsWith(LEGACY_PREFIX)) return decodeLegacy(trimmed.slice(LEGACY_PREFIX.length));
@@ -385,7 +385,7 @@ const windowsOf = (raw: unknown, withCode: boolean): Array<PhaseWindow | Element
  * 기본값으로 되돌린다 — 남이 만든 코드가 계산을 깨뜨리면 안 된다.
  */
 export function decodeBattleCode(code: string): BattleShare {
-  const trimmed = code.trim();
+  const trimmed = code.replace(/\s+/g, '');
   if (!trimmed) throw new Error('전투 조건 코드를 입력해 주세요.');
   const body = trimmed.startsWith(BATTLE_PREFIX)
     ? trimmed.slice(BATTLE_PREFIX.length) : trimmed;
@@ -503,7 +503,7 @@ const utf8Decode = new TextDecoder();
 
 /** `NK3-`·`NK2-`를 떼고 본문 바이트만. 접두사가 아니면 빈 바이트로 친다. */
 function bodyBytes(code: string, prefix: string): Uint8Array {
-  const trimmed = code.trim();
+  const trimmed = code.replace(/\s+/g, '');
   if (!trimmed.startsWith(prefix)) return new Uint8Array(0);
   try {
     return fromBase64Url(trimmed.slice(prefix.length));
@@ -549,7 +549,7 @@ export function encodeUnionCode(share: UnionShare): string {
 
 /** 유니온 판 코드를 읽는다. 잘린 코드는 «어디서 끊겼는지»가 아니라 한 줄로 알린다. */
 export function decodeUnionCode(code: string): UnionShare {
-  const trimmed = code.trim();
+  const trimmed = code.replace(/\s+/g, '');
   if (!trimmed) throw new Error('유니온 판 코드를 입력해 주세요.');
   if (!trimmed.startsWith(UNION_PREFIX)) {
     throw new Error('유니온 판 코드는 «NK4-»로 시작합니다. 조건 코드(NK3-)나 조합 코드(NK2-)는 각 칸에 따로 넣어 주세요.');

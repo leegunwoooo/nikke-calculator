@@ -866,7 +866,7 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
 
         <div class="union-step" data-union-step="3" hidden>
           <h3>보스와 덱</h3>
-          <p class="field-note">보스는 <b>전투 조건 코드</b>(NK3-), 덱은 <b>조합 코드</b>(NK2-)로 채웁니다. 계산기에 잡아 둔 설정을 가져오거나, <b>공유 목록에서 골라</b> 넣을 수도 있습니다. 체크를 끈 보스는 계산하지 않습니다 — 풍압엔 강한데 전격엔 약한 사람이 있으니까요.</p>
+          <p class="field-note">보스는 <b>전투 조건 코드</b>(NK3-)나 <b>보스 메이커 코드</b>(NK5-), 덱은 <b>조합 코드</b>(NK2-)로 채웁니다. 계산기에 잡아 둔 설정을 가져오거나, <b>공유 목록에서 골라</b> 넣을 수도 있습니다. 체크를 끈 보스는 계산하지 않습니다 — 풍압엔 강한데 전격엔 약한 사람이 있으니까요.</p>
           <div class="union-board-bar">
             <span class="union-board-label">판 전체</span>
             <button type="button" class="roster-import" data-union-set-share>공유에서 판 고르기</button>
