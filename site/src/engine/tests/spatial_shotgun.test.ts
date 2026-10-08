@@ -103,7 +103,7 @@ describe('SpatialShotgunTest', () => {
     state._in_weapon_change = true;
     const enemy = { shotgun_model: 'spatial-convergence-v1', shotgun_target_diameter: 120, core_px: 0 };
     const [ph] = state._pellet_probabilities(0, { state: {} } as any, enemy, {}, 0);
-    expect(withinDelta(ph, .5 ** 2.55, .002)).toBe(true);
+    expect(withinDelta(ph, (18 / 37.5) ** 2.55, .002)).toBe(true);
     expect(state._spread_scale).toBe(75);
   });
 });

@@ -32,12 +32,12 @@
   ]
  },
  "accuracy": {
-  "_comment": "탄착군 직경(px). D = base_diameter - acc_slope * 명중%. 출처: https://arca.live/b/nikketgv/96243965 (커뮤니티 실험값, 미검증)",
+  "_comment": "탄착군 직경(px). D = base_diameter - acc_slope * 명중%. base_diameter는 CDN roledata 공식값(start_accuracy_circle_scale), acc_slope는 커뮤니티 실험값(https://arca.live/b/nikketgv/96243965, 미검증) 유지.",
   "_note": "RL·SR은 공식 미상이나 기본 탄착군이 매우 작아 10px 고정 가정. MG는 예열 전 크지만 예열 완료 후 매우 작아지므로 동일하게 10px 고정 가정. 이 세 무기 유형은 acc_slope=0으로 명중률에 따른 변화 미적용.",
   "_model": "power — P = min(1, (r_c/R)^n),  r_c=core_px/2,  R=D/2. 출처: context/scenarios/명중률 탄착군.md",
   "_model_n": 2.55,
   "AR": {
-   "base_diameter": 76,
+   "base_diameter": 75,
    "acc_slope": 0.69
   },
   "SMG": {
@@ -45,7 +45,7 @@
    "acc_slope": 1.0
   },
   "SG": {
-   "base_diameter": 240,
+   "base_diameter": 250,
    "acc_slope": 2.18
   },
   "MG": {
@@ -62,23 +62,23 @@
   }
  },
  "accuracy_distance": {
-  "_comment": "신식(거리) 적정거리 모드의 탄착군 직경. 단위는 위 accuracy와 같다(AR 명중 0% = 76). 인게임 스크린샷 실측(유저 제공 2026-09-24, 같은 보스·거리): 화면 px × 1.767(= AR 76 ÷ 화면 43px). AR 명중 23.62%는 화면 34px로 위 식(−21.4%)과 맞는다. SMG는 명중 23.62%에서도 원이 55px 그대로라 기울기 0. MG는 예열 전 cold_diameter(화면 143px)에서 예열 완료 시 base_diameter(화면 54px)로 줄어든다. SG·SR·RL은 새로 잰 값이 없어 accuracy와 같다. 구식 모드는 이 표를 쓰지 않는다.",
+  "_comment": "신식(거리) 적정거리 모드의 탄착군 직경. 단위는 위 accuracy와 같다(AR 명중 0% = 75). base_diameter·cold_diameter는 CDN roledata 공식값(start/end_accuracy_circle_scale) — MG는 예열에 따라 250→10으로 조여진다. 옛 화면 실측(2026-09-24)은 조준원 표시 크기를 잰 것이라 공식값이 대체한다: AR 76→75·SMG 97→110·SG 240→250·MG cold 253→250·warm 95→10. acc_slope는 커뮤니티 추정 그대로(공식 데이터에 기울기는 없다). 구식 모드는 이 표를 쓰지 않는다.",
   "AR": {
-   "base_diameter": 76,
+   "base_diameter": 75,
    "acc_slope": 0.69
   },
   "SMG": {
-   "base_diameter": 97,
+   "base_diameter": 110,
    "acc_slope": 0
   },
   "SG": {
-   "base_diameter": 240,
+   "base_diameter": 250,
    "acc_slope": 2.18
   },
   "MG": {
-   "base_diameter": 95,
+   "base_diameter": 10,
    "acc_slope": 0,
-   "cold_diameter": 253
+   "cold_diameter": 250
   },
   "SR": {
    "base_diameter": 10,

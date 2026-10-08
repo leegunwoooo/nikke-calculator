@@ -35,18 +35,19 @@ describe('신식 적정거리', () => {
     // 구식: 예전과 같다(MG 10px, SMG 110 − 명중%).
     expect(_spread_diameter('MG', 0)).toBe(10);
     expect(_spread_diameter('SMG', 20)).toBe(90);
-    expect(_spread_diameter('AR', 23.62)).toBeCloseTo(76 - 0.69 * 23.62, 9);
-    // 신식: SMG는 명중률과 무관, MG는 예열 전 253 → 예열 후 95.
-    expect(_spread_diameter('SMG', 20, DISTANCE)).toBe(97);
-    expect(_spread_diameter('MG', 0, DISTANCE, 0)).toBe(253);
-    expect(_spread_diameter('MG', 0, DISTANCE, 1)).toBe(95);
-    expect(_spread_diameter('MG', 0, DISTANCE, 0.5)).toBe(174);
+    expect(_spread_diameter('AR', 23.62)).toBeCloseTo(75 - 0.69 * 23.62, 9);
+    // 신식: SMG는 명중률과 무관, MG는 예열 전 250 → 예열 후 10 (CDN 공식값).
+    expect(_spread_diameter('SMG', 20, DISTANCE)).toBe(110);
+    expect(_spread_diameter('MG', 0, DISTANCE, 0)).toBe(250);
+    expect(_spread_diameter('MG', 0, DISTANCE, 1)).toBe(10);
+    expect(_spread_diameter('MG', 0, DISTANCE, 0.5)).toBe(130);
     expect(_spread_diameter('AR', 23.62, DISTANCE)).toBe(_spread_diameter('AR', 23.62));
     // 무기 변경 모드의 «명중률 100% = 핀포인트» 선언은 기울기 0인 무기군에서도 살아 있다.
     expect(_spread_diameter('SMG', 100, DISTANCE)).toBe(10);
-    // 코어 확률도 같은 표를 탄다.
+    // 코어 확률도 같은 표를 탄다 — 예열 전 MG는 코어를 거의 못 맞히고, 예열이 끝나면 다 꽂는다.
     expect(_core_hit_prob('MG', 0, 52)).toBe(1);
-    expect(_core_hit_prob('MG', 0, 52, DISTANCE)).toBeLessThan(0.3);
+    expect(_core_hit_prob('MG', 0, 52, DISTANCE, 0)).toBeLessThan(0.3);
+    expect(_core_hit_prob('MG', 0, 52, DISTANCE, 1)).toBe(1);
   });
 
   it('구간을 따라 프레임마다 적정 무기군과 코어 크기가 바뀐다', () => {
@@ -93,7 +94,7 @@ describe('신식 적정거리', () => {
       { def: 0, code: '', core_px: 60, range_model: 'distance', distance: 30 });
     const shots = result.hits.filter((h) => h.core_frac != null).map((h) => h.core_frac as number);
     expect(shots.length).toBeGreaterThan(10);
-    // 첫 발은 예열 전(253) 탄착군, 예열이 끝나면 예열 후(95) 탄착군의 확률에 닿는다.
+    // 첫 발은 예열 전(250) 탄착군, 예열이 끝나면 예열 후(10) 탄착군의 확률에 닿는다.
     expect(shots[0]!).toBeCloseTo(_core_hit_prob('MG', 0, 60, DISTANCE, 0), 2);
     expect(shots[0]!).toBeLessThan(Math.max(...shots) / 5);
     expect(Math.max(...shots)).toBeCloseTo(_core_hit_prob('MG', 0, 60, DISTANCE, 1), 9);

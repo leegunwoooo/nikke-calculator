@@ -47,14 +47,14 @@ function _mode_core_share(core_px: number): number {
 }
 
 describe('WeaponChangeSpreadTest', () => {
-  /** 작은 코어에 펠릿이 다 꽂히지 않는다 — 샷건 탄착군(240px)으로 잰다. */
+  /** 작은 코어에 펠릿이 다 꽂히지 않는다 — 샷건 탄착군(250px)으로 잰다. */
   it('test_mode_pellets_spread_like_a_shotgun', () => {
-    // SG 240px · 코어 20px → (10/120)^2.55 ≈ 0.002. 사실상 안 맞는다.
+    // SG 250px · 코어 20px → (10/125)^2.55 ≈ 0.0016. 사실상 안 맞는다.
     const a = _mode_core_share(20);
-    expect(almostEqual(a, 0.002, 3), `${a}`).toBe(true);
+    expect(almostEqual(a, 0.0016, 3), `${a}`).toBe(true);
     // 코어가 커지면 그만큼 늘어난다 — 크기가 무의미하지 않다는 것이 요점이다.
     const b = _mode_core_share(90);
-    expect(almostEqual(b, 0.082, 3), `${b}`).toBe(true);
+    expect(almostEqual(b, 0.0738, 3), `${b}`).toBe(true);
   }, 120_000);
 
   /** 값의 출처를 못 박는다 — 덮어쓰기를 빼면 RL 탄착군으로 되돌아간다. */
@@ -78,6 +78,6 @@ describe('WeaponChangeSpreadTest', () => {
     const shots = result.hits.filter((h) => h.core_frac != null);
     expect(shots.length).toBeGreaterThan(0);
     // 혼자서는 풀 버스트가 없어 모드에 들지 않는다 — 전부 기본 SG 사격이다.
-    expect(shots.every((h) => Math.abs(h.core_frac! - 0.0821) < 0.001)).toBe(true);
+    expect(shots.every((h) => Math.abs(h.core_frac! - 0.0738) < 0.001)).toBe(true);
   }, 60_000);
 });

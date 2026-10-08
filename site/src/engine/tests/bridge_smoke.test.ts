@@ -185,8 +185,8 @@ describe('CoreShareTest', () => {
     for (const [name, row] of Object.entries(rows)) share[name] = row['coreShots'] / row['shots'];
     // SR은 탄착군이 코어보다 작아 언제나 코어다.
     expect(almostEqual(share['루주']!, 1.0, 6)).toBe(true);
-    // AR은 76px 탄착군이라 절반쯤 빗나간다.
-    expect(almostEqual(share['블랑']!, 0.380, 3)).toBe(true);
+    // AR은 75px 탄착군이라 절반쯤 빗나간다.
+    expect(almostEqual(share['블랑']!, 0.393, 3)).toBe(true);
     // 기본이 RL이어도 모드 중에는 그 모드의 탄착군으로 따진다. 이 모드는 좁아서
     // (유저 확인) 100%지만, 그 값은 무기군 기본값이 아니라 실측에서 온다.
     expect(almostEqual(share['라플라스 : 얼티밋 히어로']!, 1.0, 6)).toBe(true);
