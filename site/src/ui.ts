@@ -961,9 +961,12 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
               <button type="button" class="roster-import" data-add-nikke title="미출시·미등록 니케를 직접 추가">새 니케 추가</button>
               <button type="button" class="roster-import" data-share-open title="편성을 이 브라우저에 이름 붙여 저장하거나, 코드·링크로 주고받습니다. 개인 스펙과 전투 조건은 담기지 않습니다">프리셋 / 조합 공유</button>
               <button type="button" class="roster-import" data-backup-open title="이 브라우저에 쌓인 편성·육성·프리셋을 파일 한 장으로 뜨고, 다시 부어 되살립니다. 기기를 옮길 때 씁니다">백업</button>
-              <button type="button" class="roster-import danger" data-reset-all title="편성·설정·CSV 로스터·추가한 니케·저장된 결과를 모두 지우고 처음 상태로 되돌립니다">완전 초기화</button>
               <label class="toggle-field mode-toggle" title="다른 덱에서 이미 만져 둔 개별 설정을 편성할 때 그대로 가져옵니다"><input id="carry-settings" type="checkbox" checked /><span class="toggle"></span><span>설정 이어받기</span></label>
               <label class="toggle-field mode-toggle"><input id="squad-mode" type="checkbox" /><span class="toggle"></span><span data-deck-mode-label>단일덱 모드</span></label>
+              <!-- 위험 동작은 줄 맨 끝 — 일상 단추 사이에 두면 백업·토글을 누르다
+                   같이 눌린다. 끝에 두어도 초기화 창(확인)이 한 겹 더 있으니 찾는
+                   데 어렵지 않다. -->
+              <button type="button" class="roster-import danger" data-reset-all title="편성·설정·CSV 로스터·추가한 니케·저장된 결과를 모두 지우고 처음 상태로 되돌립니다">완전 초기화</button>
             </div>
             <p class="roster-note" data-roster-note hidden></p>
           </div>
@@ -5757,7 +5760,14 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
     pickerOpen = on;
     pickerPanel.hidden = !on;
     renderSquad();
-    if (on) renderRosterGrid();
+    if (on) {
+      renderRosterGrid();
+      // 판을 연 이유가 곧 «찾아서 넣기»라, 마우스 환경에서는 검색칸으로 바로 보낸다.
+      // 터치에서는 가상키보드가 떠서 목록을 가리므로 두지 않는다.
+      if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+        rosterSearch.focus({ preventScroll: true });
+      }
+    }
   };
 
   element<HTMLButtonElement>(root, '[data-picker-close]')
@@ -6019,7 +6029,19 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
     setFilterPanel(false);
   });
   onDocument('keydown', (event) => {
-    if (event.key === 'Escape' && !filterPanel.hidden) setFilterPanel(false);
+    if (event.key === 'Escape' && !filterPanel.hidden) { event.preventDefault(); setFilterPanel(false); }
+  });
+
+  // Esc로 «가장 위에 뜬 창 하나»를 닫는다 — 창마다 Esc를 따로 달아 두면 새 창이
+  // 생길 때마다 빠지는 곳이 나온다(계산 기록·백업·피드백 등은 없었다). 가장 마지막에
+  // 등록해 창 고유의 Esc 처리가 먼저 돌고, 아무도 소비하지 않은 Esc만 받는다 — 그래서
+  // 한 번의 Esc로 두 겹이 닫히는 일이 없다. 창의 ✕ 단추를 대신 눌러 닫으니 창별
+  // 정리(고르기판 원위치 등)도 그대로 탄다.
+  onDocument('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (root.querySelector('.character-info-dialog[open]')) return;
+    const open = [...root.querySelectorAll<HTMLElement>('.custom-modal:not([hidden])')];
+    open.at(-1)?.querySelector<HTMLButtonElement>('.custom-close')?.click();
   });
   filterReset.addEventListener('click', () => {
     for (const set of Object.values(picked)) set.clear();
@@ -6292,6 +6314,13 @@ export function mountCalculator(root: HTMLElement, deps: CalculatorDependencies)
   renderFilterPanel();
   renderFilterState();
   rosterSearch.addEventListener('input', renderRosterGrid);
+  // 검색 중 Enter는 «첫 번째로 걸린 것»을 넣는다. 그냥 두면 폼이 제출돼
+  // 고르는 도중에 계산이 돌아간다 — 여기서 반드시 막아야 한다.
+  rosterSearch.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    rosterGrid.querySelector<HTMLButtonElement>('.roster-cell:not(:disabled)')?.click();
+  });
 
   // ── 백업 ────────────────────────────────────────────────────────────────
   // 서버에 아무것도 안 남기는 계산기라, 브라우저를 갈아타면 쌓아 둔 것이 통째로
