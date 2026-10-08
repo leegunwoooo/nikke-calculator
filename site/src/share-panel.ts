@@ -117,13 +117,14 @@ export function squadPreview(
 export function filterShareItems(items: ShareItem[], query: string): ShareItem[] {
   const needle = query.trim().toLowerCase();
   if (needle === '') return items;
+  // 옛 항목은 by·auto가 없을 수 있다 — 서버가 있는 그대로 내리므로 여기서 막는다.
   return items.filter((item) => [item.name, item.by, item.auto]
-    .some((field) => field.toLowerCase().includes(needle)));
+    .some((field) => (field ?? '').toLowerCase().includes(needle)));
 }
 
 /** 인기순 — 엄지 차이로 세우고, 같으면 새것이 앞이다. */
 export function rankItems(items: ShareItem[]): ShareItem[] {
-  return [...items].sort((a, b) => (b.up - b.down) - (a.up - a.down)
+  return [...items].sort((a, b) => ((b.up ?? 0) - (b.down ?? 0)) - ((a.up ?? 0) - (a.down ?? 0))
     || Date.parse(b.at) - Date.parse(a.at));
 }
 
