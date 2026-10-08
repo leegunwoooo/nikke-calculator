@@ -546,4 +546,42 @@ describe('유니온 레이드 판 코드 (NK4)', () => {
     const code = encodeUnionCode(sampleShare());
     expect(() => decodeUnionCode(code.slice(0, code.length - 12))).toThrow(/끊겼|해석/);
   });
+
+  it('전투 조건 본문이 255바이트를 넘어도 깨지지 않는다(v2)', () => {
+    // 구간 데이터가 많은 조건(유레 보스 페이즈 표)은 NK3 본문 JSON이 255B를 넘긴다.
+    // 1바이트 길이에 넣으면 mod 256로 말려 판 전체가 깨졌다 — 실제로 그런 코드가
+    // 올라가 있었다(리빌드 벌컨 R, 본문 262B).
+    const big = encodeBattleCode({
+      ...baseBattle,
+      duration: 180,
+      elementWindows: Array.from({ length: 20 }, (_, i) =>
+        ({ from: i * 8, to: i * 8 + 7, code: '수냉' })),
+      distanceWindows: Array.from({ length: 20 }, (_, i) =>
+        ({ from: i * 8, to: i * 8 + 7, distance: 30 + i })),
+    } as never);
+    const bigBody = Uint8Array.from(
+      atob(big.slice(4).replace(/-/g, '+').replace(/_/g, '/')),
+      (c) => c.charCodeAt(0));
+    expect(bigBody.length).toBeGreaterThan(255);
+    const share = {
+      bosses: [{ name: '리빌드 벌컨 R', enabled: true, battleCode: big, deckCodes: [''] }],
+    };
+    const back = decodeUnionCode(encodeUnionCode(share));
+    expect(back.bosses[0]!.battleCode).toBe(big);
+    expect(decodeBattleCode(back.bosses[0]!.battleCode).elementWindows).toHaveLength(20);
+  });
+
+  it('구 형식(1바이트 길이) 코드도 그대로 읽는다', () => {
+    // v1: [0, 보스수, enabled, 이름길이(1B), 이름, 조건길이(1B), 조건, 덱수, ...]
+    const inner = battle(150, '작열');
+    const innerBody = Uint8Array.from(
+      atob(inner.slice(4).replace(/-/g, '+').replace(/_/g, '/')),
+      (c) => c.charCodeAt(0));
+    const name = new TextEncoder().encode('작열 글러트니');
+    const bytes = [0, 1, 1, name.length, ...name, innerBody.length, ...innerBody, 0];
+    const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const back = decodeUnionCode(`NK4-${b64}`);
+    expect(back.bosses[0]!.name).toBe('작열 글러트니');
+    expect(back.bosses[0]!.battleCode).toBe(inner);
+  });
 });

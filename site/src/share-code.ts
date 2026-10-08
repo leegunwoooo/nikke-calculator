@@ -526,22 +526,29 @@ export function encodeUnionCode(share: UnionShare): string {
     && boss.battleCode.trim() === ''
     && boss.deckCodes.every((code) => code.trim() === ''));
 
-  const bytes: number[] = [0, bosses.length];
+  // 첫 바이트 0x80 = v2. 길이를 전부 2바이트로 쓴다 — NK3 본문(JSON)이 구간
+  // 데이터를 많이 담으면 255B를 넘는데, 1바이트에 넣으면 mod 256로 말려 판 전체가
+  // 깨졌다. 구 형식(플래그 0) 코드는 디코더가 그대로 읽는다.
+  const putLen = (n: number) => { bytes.push(n & 0xff, (n >>> 8) & 0xff); };
+  const bytes: number[] = [0x80, bosses.length];
   for (const boss of bosses) {
     bytes.push(boss.enabled ? 1 : 0);
 
     let name = utf8.encode(boss.name.trim());
     if (name.length > UNION_NAME_MAX) name = name.slice(0, UNION_NAME_MAX);
-    bytes.push(name.length, ...name);
+    putLen(name.length);
+    bytes.push(...name);
 
     const battle = bodyBytes(boss.battleCode, BATTLE_PREFIX);
-    bytes.push(battle.length, ...battle);
+    putLen(battle.length);
+    bytes.push(...battle);
 
     const decks = trimTail(boss.deckCodes, (code) => code.trim() === '');
     bytes.push(decks.length);
     for (const code of decks) {
       const deck = bodyBytes(code, PREFIX);
-      bytes.push(deck.length, ...deck);
+      putLen(deck.length);
+      bytes.push(...deck);
     }
   }
   return UNION_PREFIX + toBase64Url(Uint8Array.from(bytes));
@@ -580,22 +587,24 @@ export function decodeUnionCode(code: string): UnionShare {
   };
 
   need(2);
-  cursor += 1;                     // 예비 플래그 — 지금은 읽지 않는다
+  const flags = byte();            // 0x80 = v2 — 길이가 2바이트. 그 외는 구 형식(1바이트)
+  const wide = (flags & 0x80) !== 0;
+  const len = () => (wide ? byte() | (byte() << 8) : byte());
   const count = byte();
   const bosses: UnionBossShare[] = [];
   for (let i = 0; i < count; i += 1) {
-    const flags = byte();
-    const name = utf8Decode.decode(take(byte()));
-    const battle = take(byte());
+    const bossFlags = byte();
+    const name = utf8Decode.decode(take(len()));
+    const battle = take(len());
     const deckCount = byte();
     const deckCodes: string[] = [];
     for (let d = 0; d < deckCount; d += 1) {
-      const deck = take(byte());
+      const deck = take(len());
       deckCodes.push(deck.length > 0 ? PREFIX + toBase64Url(deck) : '');
     }
     bosses.push({
       name,
-      enabled: (flags & 1) === 1,
+      enabled: (bossFlags & 1) === 1,
       battleCode: battle.length > 0 ? BATTLE_PREFIX + toBase64Url(battle) : '',
       deckCodes,
     });

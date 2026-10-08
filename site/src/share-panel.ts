@@ -1,7 +1,7 @@
 import {elementText} from './element-inline';
 import type { ShareItem, ShareKind, ShareServer, VoteValue } from './share-server';
 import { summarizeBattle } from './share-server';
-import { decodeBattleCode } from './share-code';
+import { decodeBattleCode, decodeUnionCode } from './share-code';
 
 // 공유 모달의 서버 쪽 판. 전투 조건과 조합이 같은 구조를 쓰므로 여기 한 번만 쓴다.
 // 세 갈래다 — «올리기»는 지금 설정을 이름 붙여 보내고, «내려받기»는 남이 올린 것을
@@ -194,9 +194,17 @@ export function mountSharePanel(hosts: SharePanelHosts, deps: SharePanelDeps): S
     try {
       const got = await deps.server.list(deps.kind);
       items = got.items.map(item=>{
-        if(deps.kind!=='boss')return item;
-        try{return {...item,auto:summarizeBattle(decodeBattleCode(item.code))};}
-        catch{return item;}
+        if(deps.kind==='boss'){
+          try{return {...item,auto:summarizeBattle(decodeBattleCode(item.code))};}
+          catch{return item;}
+        }
+        // 깨진 판 코드(구 형식의 1바이트 길이가 말린 것 등)는 적용해도 실패할 뿐이니
+        // 목록에서 미리 표시하고 적용을 막는다.
+        if(deps.kind==='union'){
+          try{decodeUnionCode(item.code);}
+          catch{return {...item,broken:true};}
+        }
+        return item;
       });
       mine = got.mine;
       applied = got.applied;
@@ -334,6 +342,11 @@ export function mountSharePanel(hosts: SharePanelHosts, deps: SharePanelDeps): S
       const apply = el('button', 'share-apply-btn', '적용');
       apply.type = 'button';
       apply.dataset.shareApply = item.id;
+      if (item.broken) {
+        apply.disabled = true;
+        apply.title = '코드가 손상돼 있어 적용할 수 없습니다';
+        by.append(el('span', 'share-uses', ' · 코드 손상'));
+      }
       apply.addEventListener('click', () => {
         try {
           deps.apply(item);

@@ -25,6 +25,8 @@ export interface ShareItem {
   uses: number;
   /** 적용에 쓰는 공유 코드. 목록과 함께 온다 — 받아서 바로 적용할 수 있다. */
   code: string;
+  /** 목록 쪽에서 코드를 미리 풀어 봤더니 깨져 있을 때 — 적용을 막는다. */
+  broken?: boolean;
 }
 
 export interface ShareListResult {
