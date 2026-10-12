@@ -14,7 +14,7 @@ describe('Batch12', () => {
   it('test_registered', () => {
     const skills = data();
     expect(B.every((n) => n in skills)).toBe(true);
-    // 정식 202 + 프리뷰 1(벨로타 : 펌킨 위치 — 출시 전 카드 전사, PARSING-CHARS §프리뷰)
+    // 정식 203 (벨로타 : 펌킨 위치 포함 — 2026-10 정식 등록으로 프리뷰 승격)
     expect(Object.keys(skills).filter((n) => !n.startsWith('test_')).length).toBe(203);
   });
 

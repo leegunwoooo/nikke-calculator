@@ -1,5 +1,5 @@
 /**
- * 벨로타 : 펌킨 위치 (프리뷰 · Lv10 카드 전사) — char-add 단계 4 검증.
+ * 벨로타 : 펌킨 위치 — char-add 단계 4 검증.
  *
  * «자신의 우측 자리 아군 1기»는 스쿼드 자리 순서의 바로 오른쪽 슬롯(`allies_right:1`)이다.
  * 유령 분장은 full_burst_start마다 자신에게 걸리는 상태라 본인 버스트 미사용 사이클에도
@@ -30,12 +30,12 @@ function activations(log: any, name: string) {
   return log.buff_events.filter((e: any) => e.name === name && e.kind === 'activate');
 }
 
-describe('벨로타 : 펌킨 위치 (프리뷰)', () => {
+describe('벨로타 : 펌킨 위치', () => {
   it('test_registered', () => {
     const skills = readJson<Record<string, any[]>>('data/parsed_skills.json');
     const entries = skills[BEL]!;
     expect(entries.length).toBe(7);
-    expect(entries.every((e) => Object.keys(e.values ?? {}).join(',') === '10' || !('values' in e))).toBe(true);
+    expect(entries.every((e) => Object.keys(e.values ?? {}).join(',') === '1,2,3,4,5,6,7,8,9,10' || !('values' in e))).toBe(true);
   });
 
   it('우측 아군에게만 버프가 걸린다 — 스킬1·버스트 대상 = 크라운', () => {
