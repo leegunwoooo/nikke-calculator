@@ -54,7 +54,7 @@ describe('풀차징컨', () => {
 });
 
 describe('무기 변경 첫 차지 지연', () => {
-  it('신 : 스위프트 바니의 스위프트 피어싱은 5초에 9발이다(영상 실측)', () => {
+  it('신 : 스위프트 바니의 스위프트 캐럿은 5초에 9발이다(영상 실측)', () => {
     // 버스트는 1·2단계가 있어야 돈다 — 시험용 B1·B2를 앞에 세운다.
     const squad = build_squad(['test_B1', 'test_B2', '신 : 스위프트 바니']);
     const result = simulate(squad, { duration: 60, rng_mode: 'expected', first_burst_time: 3, burst_gauge_mode: 'fixed', burst_regen_time: 2 },

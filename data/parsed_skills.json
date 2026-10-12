@@ -46786,7 +46786,7 @@
           "full_charge"
         ],
         "condition": [
-          "not_self_state:스위프트 피어싱"
+          "not_self_state:스위프트 캐럿"
         ]
       },
       "target": "self",
@@ -46817,7 +46817,7 @@
           "full_charge"
         ],
         "condition": [
-          "not_self_state:스위프트 피어싱"
+          "not_self_state:스위프트 캐럿"
         ]
       },
       "target": "self",
@@ -46951,7 +46951,7 @@
     {
       "source": "스킬2",
       "type": "weapon_change",
-      "name": "스위프트 피어싱",
+      "name": "스위프트 캐럿",
       "trigger": {
         "timing": [
           "burst_cast"
@@ -46987,13 +46987,13 @@
     {
       "source": "스킬2",
       "type": "buff",
-      "name": "스위프트 피어싱 고정 차지",
+      "name": "스위프트 캐럿 고정 차지",
       "trigger": {
         "timing": [
           "burst_cast"
         ],
         "condition": [
-          "self_state:스위프트 피어싱"
+          "self_state:스위프트 캐럿"
         ]
       },
       "target": "self",

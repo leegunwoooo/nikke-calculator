@@ -28,7 +28,7 @@ describe('BunnyReleaseTest', () => {
     bm = manager(name, { 1: 1, 2: 5, 3: 9 });
     before = bm.get_buffs(name, '', 0);
     bm.notify('burst_cast', 2, name);
-    expect(bm.weapon_change_name(name)).toBe('스위프트 피어싱');
+    expect(bm.weapon_change_name(name)).toBe('스위프트 캐럿');
     const weapon = bm.get_weapon_change(name)!;
     expect(weapon['damage_coeff']['5']).toBe(56.58);
     const after = bm.get_buffs(name, '', 2);

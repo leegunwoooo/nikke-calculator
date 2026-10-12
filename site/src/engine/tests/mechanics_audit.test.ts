@@ -74,7 +74,7 @@ describe('MechanicsAuditTest', () => {
       if (name === '길티 : 마이티 바니') {
         expect(before['charge_dmg_pct'] - after['charge_dmg_pct']).toBeCloseTo(1400, 7);
       } else {
-        // 스위프트 피어싱 5초에 9발(영상 실측 — weapon_delays `start_delay` 0.3초).
+        // 스위프트 캐럿 5초에 9발(영상 실측 — weapon_delays `start_delay` 0.3초).
         expect(observed.length).toBe(9);
         for (const [b] of observed.slice(1)) {
           expect(b['crit_rate']).toBeLessThan(observed[0]![0]['crit_rate']);
