@@ -2,5 +2,19 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "cd site && npm ci && npm run build",
   "outputDirectory": "site/dist",
-  "installCommand": "cd site && npm ci"
+  "installCommand": "cd site && npm ci",
+  "headers": [
+    {
+      "source": "/characters/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
 }
